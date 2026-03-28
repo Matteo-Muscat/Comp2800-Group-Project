@@ -82,7 +82,8 @@ public class MyAdviceApp extends JFrame {
         bookingsPanel = new StudentBookingsPanel(this, new MockStudentBookingsService());
         root.add(bookingsPanel, BOOKINGS);
         // Administrating the System Screen
-        root.add(new AdminPanel(this), ADMIN);
+        MockPrereqAdminService prereqAdminService = new MockPrereqAdminService();
+        root.add(new AdminPanel(this, authService, prereqAdminService), ADMIN);
         // Reports Screen
         reportsPanel= new StudentReportsPanel(this, new StoreBasedStudentReportsService());
         root.add(reportsPanel, REPORTS);
