@@ -3,37 +3,16 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.List;
 
-/*
- * FacultyCurriculumPanel
- * ----------------------
- * Faculty/Staff version of Curriculum Advising.
- *
- * Features (Faculty/Staff):
- * 1) Search courses (catalog search - GUI-only)
- * 2) View a student's completed courses (select student -> load list)
- * 3) Suggested courses (GUI-only list)
- * 4) Advise/Respond:
- *    - Shows incoming student inquiries (notifications/messages)
- *    - Allows faculty/staff to type and send a response
- *
- * NOTE:
- * - This is GUI-first. No backend required.
- * - Uses a mock inbox service (later becomes database + API).
- */
 public class FacultyCurriculumPanel extends JPanel {
 
-    // ---- Color scheme (matches your app) ----
     private static final Color BLUE   = new Color(0x005A9C);
     private static final Color GRAY   = new Color(0x555555);
     private static final Color YELLOW = new Color(0xFFC72C);
     private static final Color WHITE  = Color.WHITE;
 
     private final MyAdviceApp app;
-
-    // Service provides course catalog + student completion + inbox messages
     private final FacultyCurriculumService service;
 
-    // ===== Left-side models =====
     private final DefaultListModel<String> completedModel = new DefaultListModel<>();
     private final DefaultListModel<String> suggestedModel = new DefaultListModel<>();
     private final DefaultListModel<String> searchModel    = new DefaultListModel<>();
@@ -42,13 +21,9 @@ public class FacultyCurriculumPanel extends JPanel {
     private final JList<String> suggestedList = new JList<>(suggestedModel);
     private final JList<String> searchList    = new JList<>(searchModel);
 
-    // Student selector (faculty chooses which student to view)
     private final JComboBox<String> studentBox = new JComboBox<>();
-
-    // Search controls
     private final JTextField searchField = new JTextField(22);
 
-    // ===== Inbox / Respond controls =====
     private final DefaultListModel<InboxMessage> inboxModel = new DefaultListModel<>();
     private final JList<InboxMessage> inboxList = new JList<>(inboxModel);
 
@@ -65,14 +40,10 @@ public class FacultyCurriculumPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
         add(buildBody(), BorderLayout.CENTER);
 
-        // Load initial data
         loadStudents();
         refreshInbox();
     }
 
-    // =========================
-    // Header
-    // =========================
     private JComponent buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(BLUE);
@@ -91,23 +62,17 @@ public class FacultyCurriculumPanel extends JPanel {
         return header;
     }
 
-    // =========================
-    // Body layout
-    // =========================
     private JComponent buildBody() {
         JPanel body = new JPanel(new BorderLayout(15, 15));
         body.setBackground(WHITE);
         body.setBorder(new EmptyBorder(20, 25, 20, 25));
 
-        // Top: student selector + refresh inbox
         body.add(buildTopRow(), BorderLayout.NORTH);
 
-        // Center: two columns
         JPanel center = new JPanel(new GridLayout(1, 2, 15, 0));
         center.setBackground(WHITE);
-
-        center.add(buildLeftColumn());   // completed/suggested/search
-        center.add(buildRightColumn());  // inbox + respond
+        center.add(buildLeftColumn());
+        center.add(buildRightColumn());
 
         body.add(center, BorderLayout.CENTER);
         return body;
@@ -144,25 +109,17 @@ public class FacultyCurriculumPanel extends JPanel {
         return top;
     }
 
-    // =========================
-    // Left column (student academic view)
-    // =========================
     private JComponent buildLeftColumn() {
         JPanel left = new JPanel(new BorderLayout(0, 15));
         left.setBackground(WHITE);
 
-        // Top: Completed + Suggested (stacked)
         JPanel topStack = new JPanel(new GridLayout(2, 1, 0, 15));
         topStack.setBackground(WHITE);
         topStack.add(buildListCard("Completed Courses (Selected Student)", completedList));
-        topStack.add(buildListCard("Suggested Courses (GUI-only)", suggestedList));
-
-        // Bottom: Search
-        JPanel searchCard = buildSearchCard();
+        topStack.add(buildListCard("Suggested Courses", suggestedList));
 
         left.add(topStack, BorderLayout.CENTER);
-        left.add(searchCard, BorderLayout.SOUTH);
-
+        left.add(buildSearchCard(), BorderLayout.SOUTH);
         return left;
     }
 
@@ -171,7 +128,6 @@ public class FacultyCurriculumPanel extends JPanel {
         card.setBackground(WHITE);
         card.setBorder(BorderFactory.createTitledBorder("Search Courses"));
 
-        // Search row
         JPanel row = new JPanel(new GridBagLayout());
         row.setBackground(WHITE);
 
@@ -200,13 +156,11 @@ public class FacultyCurriculumPanel extends JPanel {
         searchBtn.addActionListener(e -> doSearch());
         searchField.addActionListener(e -> doSearch());
 
-        // Results list
         JScrollPane results = new JScrollPane(searchList);
         results.setPreferredSize(new Dimension(1, 160));
 
         card.add(row, BorderLayout.NORTH);
         card.add(results, BorderLayout.CENTER);
-
         return card;
     }
 
@@ -215,16 +169,15 @@ public class FacultyCurriculumPanel extends JPanel {
         searchModel.clear();
 
         List<String> results = service.searchCourses(q);
-        for (String r : results) searchModel.addElement(r);
+        for (String result : results) {
+            searchModel.addElement(result);
+        }
 
         if (results.isEmpty()) {
             JOptionPane.showMessageDialog(this, "No results found.");
         }
     }
 
-    // =========================
-    // Right column (inbox + respond)
-    // =========================
     private JComponent buildRightColumn() {
         JPanel right = new JPanel(new BorderLayout(0, 15));
         right.setBackground(WHITE);
@@ -240,7 +193,6 @@ public class FacultyCurriculumPanel extends JPanel {
         card.setBackground(WHITE);
         card.setBorder(BorderFactory.createTitledBorder("Student Messages / Notifications"));
 
-        // Make message objects display nicely in the list
         inboxList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         inboxList.setCellRenderer((list, value, index, isSelected, cellHasFocus) -> {
             JLabel lbl = new JLabel(value.summary());
@@ -251,7 +203,6 @@ public class FacultyCurriculumPanel extends JPanel {
             return lbl;
         });
 
-        // When selecting a message, show full content
         inboxList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 InboxMessage msg = inboxList.getSelectedValue();
@@ -262,7 +213,6 @@ public class FacultyCurriculumPanel extends JPanel {
             }
         });
 
-        // Message view area
         messageView.setEditable(false);
         messageView.setLineWrap(true);
         messageView.setWrapStyleWord(true);
@@ -305,7 +255,6 @@ public class FacultyCurriculumPanel extends JPanel {
         JButton send = new JButton("Send Response");
         makeActionButton(send, YELLOW);
         send.setForeground(Color.BLACK);
-
         send.addActionListener(e -> sendResponse());
 
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
@@ -315,7 +264,6 @@ public class FacultyCurriculumPanel extends JPanel {
         card.add(hint, BorderLayout.NORTH);
         card.add(replyScroll, BorderLayout.CENTER);
         card.add(bottom, BorderLayout.SOUTH);
-
         return card;
     }
 
@@ -333,30 +281,16 @@ public class FacultyCurriculumPanel extends JPanel {
             return;
         }
 
-        // Store faculty response so the student can see it in their notification box
-        MockInquiryStore.getInstance().addResponse(
-                selected.fromStudentId,      // we use studentId to attach response
-                "Faculty/Staff",             // display name for who replied (you can change later)
-                reply
-        );
-
-// Keep existing behavior (optional): still let service do whatever it currently does
-        service.sendResponse(selected, reply);
-
+        service.sendResponse(selected, currentFacultyName(), reply);
         replyBox.setText("");
-        JOptionPane.showMessageDialog(this, "Response sent (GUI-only).");
-
-        // Refresh inbox to reflect any updates
+        JOptionPane.showMessageDialog(this, "Response sent.");
         refreshInbox();
     }
 
-    // =========================
-    // Data loading
-    // =========================
     private void loadStudents() {
         studentBox.removeAllItems();
-        for (String s : service.getStudentList()) {
-            studentBox.addItem(s);
+        for (String student : service.getStudentList()) {
+            studentBox.addItem(student);
         }
 
         if (studentBox.getItemCount() > 0) {
@@ -369,36 +303,35 @@ public class FacultyCurriculumPanel extends JPanel {
         completedModel.clear();
         suggestedModel.clear();
 
-        // Get completed courses
-        for (String c : service.getCompletedCourses(studentIdOrName)) {
-            completedModel.addElement(c);
+        for (String course : service.getCompletedCourses(studentIdOrName)) {
+            completedModel.addElement(course);
         }
 
-        // Suggested courses (GUI-only list)
-        for (String s : service.getSuggestedCourses(studentIdOrName)) {
-            suggestedModel.addElement(s);
+        for (String course : service.getSuggestedCourses(studentIdOrName)) {
+            suggestedModel.addElement(course);
         }
     }
 
     private void refreshInbox() {
         inboxModel.clear();
-        List<InboxMessage> msgs = service.getInboxMessages();
+        List<InboxMessage> messages = service.getInboxMessages();
 
-        for (InboxMessage m : msgs) {
-            inboxModel.addElement(m);
+        for (InboxMessage message : messages) {
+            inboxModel.addElement(message);
         }
 
-        // Auto-select first message (if any) so the view isn't blank
-        if (!msgs.isEmpty()) {
+        if (!messages.isEmpty()) {
             inboxList.setSelectedIndex(0);
         } else {
             messageView.setText("");
         }
     }
 
-    // =========================
-    // Styling helpers
-    // =========================
+    private String currentFacultyName() {
+        UserRecord currentUser = app.getCurrentUser();
+        return currentUser == null ? "Faculty/Staff" : currentUser.name;
+    }
+
     private JPanel buildListCard(String title, JList<String> list) {
         JPanel card = new JPanel(new BorderLayout());
         card.setBackground(WHITE);
@@ -424,22 +357,15 @@ public class FacultyCurriculumPanel extends JPanel {
         btn.setFont(btn.getFont().deriveFont(Font.BOLD, 14f));
     }
 
-    // ============================================================
-    // Data types + service interface
-    // ============================================================
-
-    /*
-     * InboxMessage
-     * ------------
-     * Represents a student inquiry/notification that faculty/staff can respond to.
-     */
     public static class InboxMessage {
+        public final String inquiryId;
         public final String fromStudentId;
         public final String fromStudentName;
         public final String body;
         public final String time;
 
-        public InboxMessage(String fromStudentId, String fromStudentName, String body, String time) {
+        public InboxMessage(String inquiryId, String fromStudentId, String fromStudentName, String body, String time) {
+            this.inquiryId = inquiryId;
             this.fromStudentId = fromStudentId;
             this.fromStudentName = fromStudentName;
             this.body = body;
@@ -457,23 +383,19 @@ public class FacultyCurriculumPanel extends JPanel {
         }
 
         private String preview(String s) {
-            if (s == null) return "";
+            if (s == null) {
+                return "";
+            }
             return s.length() <= 40 ? s : s.substring(0, 40) + "...";
         }
     }
 
-    /*
-     * FacultyCurriculumService
-     * ------------------------
-     * GUI calls this interface. Mock now, backend later.
-     */
     public interface FacultyCurriculumService {
         List<String> getStudentList();
         List<String> getCompletedCourses(String studentIdOrName);
         List<String> getSuggestedCourses(String studentIdOrName);
         List<String> searchCourses(String query);
-
         List<InboxMessage> getInboxMessages();
-        void sendResponse(InboxMessage msg, String reply);
+        void sendResponse(InboxMessage msg, String facultyName, String reply);
     }
 }

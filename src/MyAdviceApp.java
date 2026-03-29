@@ -34,6 +34,8 @@ public class MyAdviceApp extends JFrame {
 
     // root is the container panel holding all screens
     private final JPanel root = new JPanel(cards);
+    private final AppBackend backend = new AppBackend();
+    private final AppSession session = new AppSession();
 
     private LoginPanel loginPanel;
 
@@ -41,6 +43,7 @@ public class MyAdviceApp extends JFrame {
     private JPanel curriculumPanel;
     private JPanel schedulingPanel;
     private JPanel bookingsPanel;
+    private JPanel adminPanel;
     private JPanel reportsPanel;
 
     public MyAdviceApp() {
@@ -54,8 +57,7 @@ public class MyAdviceApp extends JFrame {
         // Center on screen
         setLocationRelativeTo(null);
 
-        // Create mock auth service (acts like database for now)
-        AuthService authService = new AuthService();
+        AuthService authService = backend.getAuthService();
 
         // Add screens to CardLayout
 
@@ -73,18 +75,19 @@ public class MyAdviceApp extends JFrame {
 
         // 4) Module Screens
         // Curriculum screen
-        curriculumPanel = new StudentCurriculumPanel(this, new MockStudentCurriculumService());
+        curriculumPanel = buildCurriculumPanel();
         root.add(curriculumPanel, CURRICULUM);
         // Scheduling Screen
-        schedulingPanel = new StudentSchedulingPanel(this);
+        schedulingPanel = buildSchedulingPanel();
         root.add(schedulingPanel, SCHEDULING);
         // Bookings Screen
-        bookingsPanel = new StudentBookingsPanel(this, new MockStudentBookingsService());
+        bookingsPanel = buildBookingsPanel();
         root.add(bookingsPanel, BOOKINGS);
         // Administrating the System Screen
-        root.add(new AdminPanel(this), ADMIN);
+        adminPanel = buildAdminPanel();
+        root.add(adminPanel, ADMIN);
         // Reports Screen
-        reportsPanel= new StudentReportsPanel(this, new StoreBasedStudentReportsService());
+        reportsPanel = buildReportsPanel();
         root.add(reportsPanel, REPORTS);
 
         // Put root card panel inside the JFrame
@@ -137,6 +140,13 @@ public class MyAdviceApp extends JFrame {
             root.revalidate();
             root.repaint();
         }
+        if (ADMIN.equals(name)) {
+            root.remove(adminPanel);
+            adminPanel = buildAdminPanel();
+            root.add(adminPanel, ADMIN);
+            root.revalidate();
+            root.repaint();
+        }
         // If we are going to Reports page, rebuild it so it reflects the selected role
         if (REPORTS.equals(name)) {
             root.remove(reportsPanel);
@@ -156,6 +166,25 @@ public class MyAdviceApp extends JFrame {
     // Used by LoginPanel to know what role was selected
     public String getSelectedRole() {
         return selectedRole;
+    }
+
+    public void setCurrentUser(UserRecord user) {
+        session.login(user);
+        backend.ensureUserData(user);
+    }
+
+    public UserRecord getCurrentUser() {
+        return session.getCurrentUser();
+    }
+
+    public AppBackend getBackend() {
+        return backend;
+    }
+
+    public void logout() {
+        session.logout();
+        setSelectedRole(null);
+        showScreen(ROLE_SELECT);
     }
 
 
@@ -206,8 +235,7 @@ public class MyAdviceApp extends JFrame {
 
         // Log out = clear the selected role, then go back to the role select screen
         logout.addActionListener(e -> {
-            setSelectedRole(null); // clears role
-            showScreen("role_select"); // back to first screen
+            logout();
         });
 
         footer.add(logout);
@@ -221,30 +249,34 @@ public class MyAdviceApp extends JFrame {
 
     private JPanel buildCurriculumPanel() {
         if ("FACULTY_STAFF".equals(getSelectedRole())) {
-            return new FacultyCurriculumPanel(this, new MockFacultyInboxService());
+            return new FacultyCurriculumPanel(this, backend.getFacultyCurriculumService());
         }
-        return new StudentCurriculumPanel(this, new MockStudentCurriculumService());
+        return new StudentCurriculumPanel(this, backend.getStudentCurriculumService());
     }
 
     private JPanel buildSchedulingPanel() {
         if ("FACULTY_STAFF".equals(getSelectedRole())) {
-            return new FacultySchedulingPanel(this);
+            return new FacultySchedulingPanel(this, backend.getSchedulingStore());
         }
-        return new StudentSchedulingPanel(this);
+        return new StudentSchedulingPanel(this, backend.getSchedulingStore());
     }
 
     private JPanel buildBookingsPanel() {
         if ("FACULTY_STAFF".equals(getSelectedRole())) {
             return new FacultyBookingsPanel(this);
         }
-        return new StudentBookingsPanel(this, new MockStudentBookingsService());
+        return new StudentBookingsPanel(this, backend.getStudentBookingsService());
+    }
+
+    private JPanel buildAdminPanel() {
+        return new AdminPanel(this, backend.getAuthService());
     }
 
     private JPanel buildReportsPanel() {
         if ("FACULTY_STAFF".equals(getSelectedRole())) {
-            return new FacultyReportsPanel(this, new StoreBasedFacultyReportsService());
+            return new FacultyReportsPanel(this, backend.getFacultyReportsService());
         }
-        return new StudentReportsPanel(this, new StoreBasedStudentReportsService());
+        return new StudentReportsPanel(this, backend.getStudentReportsService());
     }
 
     // Navigation buttons to traverse through application

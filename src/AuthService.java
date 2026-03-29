@@ -44,7 +44,9 @@ public class AuthService {
         usersById.put("2001", new UserRecord("2001", "Adrian", UserRole.FACULTY_STAFF, true));
 
         // Existing but not approved (should show "waiting approval")
-        usersById.put("1002", new UserRecord("1002", "Student B", UserRole.STUDENT, false));
+        UserRecord pendingStudent = new UserRecord("1002", "Student B", UserRole.STUDENT, false);
+        usersById.put("1002", pendingStudent);
+        pendingRequests.add(pendingStudent);
 
         // If you want more test accounts, add them here.
     }
@@ -60,7 +62,7 @@ public class AuthService {
      *
      * We keep this simple so your GUI can show the message in a popup.
      */
-    public String login(String name, String id, UserRole role) {
+    public synchronized String login(String name, String id, UserRole role) {
 
         // Look up the user by ID
         UserRecord u = usersById.get(id);
@@ -96,7 +98,7 @@ public class AuthService {
      *
      * Returns a message that your GUI can show in a popup.
      */
-    public String requestSignup(String name, String id, UserRole role) {
+    public synchronized String requestSignup(String name, String id, UserRole role) {
 
         // If the ID already exists, do not allow another signup request
         if (usersById.containsKey(id)) {
@@ -120,7 +122,7 @@ public class AuthService {
      * --------------------
      * Returns a copy of pending requests for the Admin screen.
      */
-    public List<UserRecord> getPendingRequests() {
+    public synchronized List<UserRecord> getPendingRequests() {
         return new ArrayList<>(pendingRequests);
     }
 
@@ -130,7 +132,7 @@ public class AuthService {
      * Approves a pending user account.
      * Used by Admin screen.
      */
-    public void approve(String id) {
+    public synchronized void approve(String id) {
         UserRecord u = usersById.get(id);
         if (u != null) {
             u.approved = true;
@@ -146,7 +148,7 @@ public class AuthService {
      * Denies a pending request.
      * In this mock version, we remove them completely from the system.
      */
-    public void deny(String id) {
+    public synchronized void deny(String id) {
         pendingRequests.removeIf(r -> r.id.equals(id));
         usersById.remove(id);
     }
@@ -156,7 +158,22 @@ public class AuthService {
      * -----------
      * Returns the user record by ID (useful if you want to store current user).
      */
-    public UserRecord getUser(String id) {
+    public synchronized UserRecord getUser(String id) {
         return usersById.get(id);
+    }
+
+    public synchronized List<UserRecord> getUsersByRole(UserRole role, boolean approvedOnly) {
+        List<UserRecord> users = new ArrayList<>();
+        for (UserRecord user : usersById.values()) {
+            if (user.role != role) {
+                continue;
+            }
+            if (approvedOnly && !user.approved) {
+                continue;
+            }
+            users.add(user);
+        }
+        users.sort(Comparator.comparing(u -> u.id));
+        return users;
     }
 }

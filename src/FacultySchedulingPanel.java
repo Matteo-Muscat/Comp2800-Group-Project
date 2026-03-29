@@ -2,76 +2,54 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
-/*
- * FacultySchedulingPanel
- * ----------------------
- * Faculty/Staff version of Scheduling (timetable administration).
- *
- * Matches your Admin/Scheduling design:
- * - Create/manage course timetables (change course time, professor, etc.)
- *
- * UI behavior (GUI-only):
- * - Term dropdown
- * - Sections table (editable fields like professor/building/room)
- * - Meetings table (days + start/end) for the selected section
- * - Add/Delete section
- * - Add/Delete meeting rows
- *
- * NOTE:
- * - This is GUI-only mock data. Later this will load/save to backend/database.
- */
 public class FacultySchedulingPanel extends JPanel {
 
-    // ---- Color scheme (matches your app) ----
     private static final Color BLUE   = new Color(0x005A9C);
     private static final Color GRAY   = new Color(0x555555);
     private static final Color YELLOW = new Color(0xFFC72C);
     private static final Color WHITE  = Color.WHITE;
 
     private final MyAdviceApp app;
+    private final SchedulingStore schedulingStore;
 
-    // Term selection (timeframe)
-    private final JComboBox<String> termBox = new JComboBox<>(new String[]{"2026W", "2026S", "2026F"});
+    private final JComboBox<String> termBox = new JComboBox<>();
 
-    // Sections table model
     private final DefaultTableModel sectionModel;
-
-    // Meetings table model (depends on selected section)
     private final DefaultTableModel meetingModel;
 
-    // Tables
     private final JTable sectionTable;
     private final JTable meetingTable;
 
-    public FacultySchedulingPanel(MyAdviceApp app) {
+    private final Map<String, List<SchedulingStore.MeetingRecord>> draftMeetingsBySection = new LinkedHashMap<>();
+
+    public FacultySchedulingPanel(MyAdviceApp app, SchedulingStore schedulingStore) {
         this.app = app;
+        this.schedulingStore = schedulingStore;
 
         setLayout(new BorderLayout());
         setBackground(WHITE);
 
         add(buildHeader(), BorderLayout.NORTH);
 
-        // Sections columns (faculty/staff can edit some fields)
         String[] sectionCols = {
                 "Course ID", "Course Name", "Section", "Professor", "Building", "Room"
         };
-
-        // Meetings columns (editable)
         String[] meetingCols = {
                 "Day", "Start Time", "End Time"
         };
 
-        // Sections model: allow editing for Professor/Building/Room
         sectionModel = new DefaultTableModel(sectionCols, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
-                // Allow editing: Professor, Building, Room
-                return col == 3 || col == 4 || col == 5;
+                return true;
             }
         };
 
-        // Meetings model: allow editing all columns
         meetingModel = new DefaultTableModel(meetingCols, 0) {
             @Override
             public boolean isCellEditable(int row, int col) {
@@ -87,12 +65,12 @@ public class FacultySchedulingPanel extends JPanel {
 
         add(buildBody(), BorderLayout.CENTER);
 
-        // Load initial mock data
+        loadTerms();
         loadSectionsForSelectedTerm();
 
-        // When a section row is selected, load meetings for that section (mock)
         sectionTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
+                captureCurrentMeetings();
                 loadMeetingsForSelectedSection();
             }
         });
@@ -113,7 +91,6 @@ public class FacultySchedulingPanel extends JPanel {
 
         header.add(title, BorderLayout.WEST);
         header.add(back, BorderLayout.EAST);
-
         return header;
     }
 
@@ -122,7 +99,6 @@ public class FacultySchedulingPanel extends JPanel {
         body.setBackground(WHITE);
         body.setBorder(new EmptyBorder(20, 25, 20, 25));
 
-        // Top row: Term dropdown + refresh button
         JPanel topRow = new JPanel(new BorderLayout());
         topRow.setBackground(WHITE);
 
@@ -141,7 +117,7 @@ public class FacultySchedulingPanel extends JPanel {
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         right.setBackground(WHITE);
 
-        JButton refresh = new JButton("Reload (Mock)");
+        JButton refresh = new JButton("Reload");
         makeActionButton(refresh, BLUE);
         refresh.addActionListener(e -> loadSectionsForSelectedTerm());
 
@@ -150,9 +126,8 @@ public class FacultySchedulingPanel extends JPanel {
         topRow.add(left, BorderLayout.WEST);
         topRow.add(right, BorderLayout.EAST);
 
-        // Center: two tables stacked using split pane
-        JPanel sectionCard = wrapTable("Sections (Edit professor/building/room)", sectionTable);
-        JPanel meetingCard = wrapTable("Meetings for Selected Section (Edit day/time)", meetingTable);
+        JPanel sectionCard = wrapTable("Sections", sectionTable);
+        JPanel meetingCard = wrapTable("Meetings for Selected Section", meetingTable);
 
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, sectionCard, meetingCard);
         split.setResizeWeight(0.60);
@@ -160,7 +135,6 @@ public class FacultySchedulingPanel extends JPanel {
         split.setContinuousLayout(true);
         split.setDividerLocation(260);
 
-        // Bottom: actions
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.CENTER, 12, 0));
         actions.setBackground(WHITE);
 
@@ -176,7 +150,7 @@ public class FacultySchedulingPanel extends JPanel {
         JButton deleteMeeting = new JButton("Delete Meeting");
         makeActionButton(deleteMeeting, GRAY);
 
-        JButton save = new JButton("Save Changes (UI Only)");
+        JButton save = new JButton("Save Changes");
         makeActionButton(save, YELLOW);
         save.setForeground(Color.BLACK);
 
@@ -184,8 +158,7 @@ public class FacultySchedulingPanel extends JPanel {
         deleteSection.addActionListener(e -> deleteSelectedSection());
         addMeeting.addActionListener(e -> addMeetingRow());
         deleteMeeting.addActionListener(e -> deleteSelectedMeeting());
-        save.addActionListener(e -> JOptionPane.showMessageDialog(this,
-                "GUI-only: In the real system, changes would be saved to the database."));
+        save.addActionListener(e -> saveChanges());
 
         actions.add(addSection);
         actions.add(deleteSection);
@@ -193,11 +166,9 @@ public class FacultySchedulingPanel extends JPanel {
         actions.add(deleteMeeting);
         actions.add(save);
 
-        // Assemble body
         body.add(topRow, BorderLayout.NORTH);
         body.add(split, BorderLayout.CENTER);
         body.add(actions, BorderLayout.SOUTH);
-
         return body;
     }
 
@@ -209,30 +180,35 @@ public class FacultySchedulingPanel extends JPanel {
         return card;
     }
 
-    // ==========================
-    // Mock data loading
-    // ==========================
+    private void loadTerms() {
+        termBox.removeAllItems();
+        for (String term : schedulingStore.getTerms()) {
+            termBox.addItem(term);
+        }
+        if (termBox.getItemCount() > 0) {
+            termBox.setSelectedIndex(0);
+        }
+    }
 
     private void loadSectionsForSelectedTerm() {
-        String term = (String) termBox.getSelectedItem();
-
+        captureCurrentMeetings();
+        draftMeetingsBySection.clear();
         sectionModel.setRowCount(0);
         meetingModel.setRowCount(0);
 
-        // Mock section offerings per term
-        if ("2026W".equals(term)) {
-            sectionModel.addRow(new Object[]{"COMP-2540", "Data Structures", "001", "Dr. X", "Erie", "101"});
-            sectionModel.addRow(new Object[]{"COMP-2800", "Software Development", "002", "Dr. Y", "Erie", "202"});
-            sectionModel.addRow(new Object[]{"COMP-3300", "Operating Systems", "003", "Dr. A", "Erie", "210"});
-        } else if ("2026S".equals(term)) {
-            sectionModel.addRow(new Object[]{"COMP-3220", "OO Analysis & Design", "001", "Dr. C", "Erie", "120"});
-            sectionModel.addRow(new Object[]{"COMP-3670", "Computer Networks", "002", "Dr. D", "Leddy", "210"});
-        } else { // 2026F
-            sectionModel.addRow(new Object[]{"COMP-2540", "Data Structures", "002", "Dr. X", "Erie", "101"});
-            sectionModel.addRow(new Object[]{"COMP-2800", "Software Development", "001", "Dr. Y", "Erie", "202"});
+        List<SchedulingStore.SectionRecord> sections = schedulingStore.getSectionsForTerm(selectedTerm());
+        for (SchedulingStore.SectionRecord section : sections) {
+            sectionModel.addRow(new Object[]{
+                    section.courseId,
+                    section.courseName,
+                    section.section,
+                    section.professor,
+                    section.building,
+                    section.room
+            });
+            draftMeetingsBySection.put(section.key(), copyMeetings(section.meetings));
         }
 
-        // Auto-select first section so meetings load
         if (sectionTable.getRowCount() > 0) {
             sectionTable.setRowSelectionInterval(0, 0);
             loadMeetingsForSelectedSection();
@@ -241,37 +217,27 @@ public class FacultySchedulingPanel extends JPanel {
 
     private void loadMeetingsForSelectedSection() {
         meetingModel.setRowCount(0);
-
         int row = sectionTable.getSelectedRow();
-        if (row == -1) return;
+        if (row == -1) {
+            return;
+        }
 
-        // Read the course/section to decide meeting mock
-        String course = String.valueOf(sectionModel.getValueAt(row, 0));
-        String sec = String.valueOf(sectionModel.getValueAt(row, 2));
-
-        // Mock meeting patterns
-        if (course.equals("COMP-2540") && sec.equals("001")) {
-            meetingModel.addRow(new Object[]{"MWF", "10:00", "10:50"});
-        } else if (course.equals("COMP-2800")) {
-            meetingModel.addRow(new Object[]{"TR", "11:30", "12:50"});
-        } else if (course.equals("COMP-3300")) {
-            meetingModel.addRow(new Object[]{"MW", "16:00", "17:20"});
-        } else {
-            meetingModel.addRow(new Object[]{"TR", "14:30", "15:50"});
+        List<SchedulingStore.MeetingRecord> meetings =
+                draftMeetingsBySection.getOrDefault(currentSectionKey(), List.of());
+        for (SchedulingStore.MeetingRecord meeting : meetings) {
+            meetingModel.addRow(new Object[]{meeting.day, meeting.startTime, meeting.endTime});
         }
     }
 
-    // ==========================
-    // Actions (GUI-only)
-    // ==========================
-
     private void addSectionRow() {
-        // Add a blank-ish row for staff to edit
         sectionModel.addRow(new Object[]{"COMP-XXXX", "New Course", "000", "TBD", "TBD", "TBD"});
-
         int last = sectionModel.getRowCount() - 1;
         if (last >= 0) {
             sectionTable.setRowSelectionInterval(last, last);
+            draftMeetingsBySection.put(currentSectionKey(), new ArrayList<>(List.of(
+                    new SchedulingStore.MeetingRecord("TR", "09:00", "10:20")
+            )));
+            loadMeetingsForSelectedSection();
         }
     }
 
@@ -281,8 +247,16 @@ public class FacultySchedulingPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Select a section to delete.");
             return;
         }
+
+        draftMeetingsBySection.remove(currentSectionKey());
         sectionModel.removeRow(row);
         meetingModel.setRowCount(0);
+
+        if (sectionTable.getRowCount() > 0) {
+            int nextRow = Math.min(row, sectionTable.getRowCount() - 1);
+            sectionTable.setRowSelectionInterval(nextRow, nextRow);
+            loadMeetingsForSelectedSection();
+        }
     }
 
     private void addMeetingRow() {
@@ -291,6 +265,7 @@ public class FacultySchedulingPanel extends JPanel {
             return;
         }
         meetingModel.addRow(new Object[]{"TR", "09:00", "10:20"});
+        captureCurrentMeetings();
     }
 
     private void deleteSelectedMeeting() {
@@ -300,11 +275,84 @@ public class FacultySchedulingPanel extends JPanel {
             return;
         }
         meetingModel.removeRow(row);
+        captureCurrentMeetings();
     }
 
-    // ==========================
-    // Button styling (match app)
-    // ==========================
+    private void saveChanges() {
+        captureCurrentMeetings();
+
+        List<SchedulingStore.SectionRecord> sections = new ArrayList<>();
+        for (int row = 0; row < sectionModel.getRowCount(); row++) {
+            String courseId = value(sectionModel, row, 0);
+            String courseName = value(sectionModel, row, 1);
+            String section = value(sectionModel, row, 2);
+            String professor = value(sectionModel, row, 3);
+            String building = value(sectionModel, row, 4);
+            String room = value(sectionModel, row, 5);
+            String key = courseId + "::" + section;
+
+            sections.add(new SchedulingStore.SectionRecord(
+                    selectedTerm(),
+                    courseId,
+                    courseName,
+                    section,
+                    professor,
+                    building,
+                    room,
+                    copyMeetings(draftMeetingsBySection.getOrDefault(key, List.of()))
+            ));
+        }
+
+        schedulingStore.replaceSectionsForTerm(selectedTerm(), sections);
+        loadSectionsForSelectedTerm();
+        JOptionPane.showMessageDialog(this, "Scheduling changes saved.");
+    }
+
+    private void captureCurrentMeetings() {
+        int row = sectionTable.getSelectedRow();
+        if (row == -1) {
+            return;
+        }
+        draftMeetingsBySection.put(currentSectionKey(), meetingsFromTable());
+    }
+
+    private List<SchedulingStore.MeetingRecord> meetingsFromTable() {
+        List<SchedulingStore.MeetingRecord> meetings = new ArrayList<>();
+        for (int row = 0; row < meetingModel.getRowCount(); row++) {
+            meetings.add(new SchedulingStore.MeetingRecord(
+                    value(meetingModel, row, 0),
+                    value(meetingModel, row, 1),
+                    value(meetingModel, row, 2)
+            ));
+        }
+        return meetings;
+    }
+
+    private List<SchedulingStore.MeetingRecord> copyMeetings(List<SchedulingStore.MeetingRecord> meetings) {
+        List<SchedulingStore.MeetingRecord> copy = new ArrayList<>();
+        for (SchedulingStore.MeetingRecord meeting : meetings) {
+            copy.add(new SchedulingStore.MeetingRecord(meeting.day, meeting.startTime, meeting.endTime));
+        }
+        return copy;
+    }
+
+    private String currentSectionKey() {
+        int row = sectionTable.getSelectedRow();
+        if (row == -1) {
+            return "";
+        }
+        return value(sectionModel, row, 0) + "::" + value(sectionModel, row, 2);
+    }
+
+    private String selectedTerm() {
+        Object value = termBox.getSelectedItem();
+        return value == null ? "" : value.toString();
+    }
+
+    private String value(DefaultTableModel model, int row, int column) {
+        Object value = model.getValueAt(row, column);
+        return value == null ? "" : value.toString();
+    }
 
     private void makeSmallButton(JButton btn) {
         btn.setBackground(YELLOW);

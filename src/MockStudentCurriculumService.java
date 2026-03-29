@@ -129,9 +129,9 @@ public class MockStudentCurriculumService implements StudentCurriculumPanel.Stud
     // Reach out / broadcast inquiry
     // -------------------------------
     @Override
-    public void sendBroadcastInquiry(String studentId, String message) {
+    public void sendBroadcastInquiry(String studentId, String studentName, String message) {
         // Store inquiry so faculty can see it and respond
-        MockInquiryStore.getInstance().addInquiry(studentId, "Student " + studentId, message);
+        MockInquiryStore.getInstance().addInquiry(studentId, studentName, message);
     }
 
     // ============================================

@@ -174,14 +174,7 @@ public class LoginPanel extends JPanel {
         // Same size as Login button
         signupBtn.setPreferredSize(authBtnSize);
 
-        signupBtn.addActionListener(e -> {
-            JOptionPane.showMessageDialog(
-                    this,
-                    "Sign up request submitted (UI-only).\nIn the real system, this would be saved as PENDING for Admin approval.",
-                    "Sign Up",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-        });
+        signupBtn.addActionListener(e -> handleSignup());
 
         signupButtonRow.add(signupBtn);
         content.add(signupButtonRow);
@@ -254,7 +247,47 @@ public class LoginPanel extends JPanel {
         }
 
         // Success -> main menu
+        app.setCurrentUser(auth.getUser(id));
         app.showScreen("menu");
+    }
+
+    private void handleSignup() {
+        String name = nameField.getText().trim();
+        String id = idField.getText().trim();
+
+        if (name.isEmpty() || id.isEmpty()) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Enter both Name and ID before requesting sign up.",
+                    "Missing Information",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            return;
+        }
+
+        String roleStr = app.getSelectedRole();
+        if (roleStr == null) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Choose Student or Faculty/Staff first.",
+                    "Role Missing",
+                    JOptionPane.WARNING_MESSAGE
+            );
+            app.showScreen("role_select");
+            return;
+        }
+
+        UserRole role = roleStr.equals("STUDENT") ? UserRole.STUDENT : UserRole.FACULTY_STAFF;
+        String result = auth.requestSignup(name, id, role);
+
+        JOptionPane.showMessageDialog(
+                this,
+                result,
+                "Sign Up",
+                "That ID already exists. Try logging in instead.".equals(result)
+                        ? JOptionPane.WARNING_MESSAGE
+                        : JOptionPane.INFORMATION_MESSAGE
+        );
     }
 
     // small button for back button

@@ -30,11 +30,6 @@ public class StudentBookingsPanel extends JPanel {
     // Shared mock store (acts like the database)
     private final MockBookingStore store = MockBookingStore.getInstance();
 
-    // Mock current student (later comes from login/currentUser)
-    // IMPORTANT: Keep these as separate fields so we can save student id/name properly.
-    private final String currentStudentName = "Talha Hanif";
-    private final String currentStudentId   = "1001";
-
     // Service for advisor list + descriptions (still fine to keep as mock)
     private final StudentBookingsService service;
 
@@ -138,7 +133,7 @@ public class StudentBookingsPanel extends JPanel {
         studentLbl.setForeground(GRAY);
         studentLbl.setFont(studentLbl.getFont().deriveFont(Font.BOLD, 14f));
 
-        JLabel studentVal = new JLabel(currentStudentName + " (" + currentStudentId + ")");
+        JLabel studentVal = new JLabel(currentStudentName() + " (" + currentStudentId() + ")");
         studentVal.setForeground(GRAY);
         studentVal.setFont(studentVal.getFont().deriveFont(Font.BOLD, 14f));
 
@@ -287,7 +282,7 @@ public class StudentBookingsPanel extends JPanel {
         for (MockBookingStore.BookingRequest r : all) {
 
             // Only show requests that belong to this student
-            if (!currentStudentId.equals(r.studentId)) continue;
+            if (!currentStudentId().equals(r.studentId)) continue;
 
             requestsModel.addRow(new Object[] {
                     r.requestId,
@@ -315,6 +310,11 @@ public class StudentBookingsPanel extends JPanel {
         String time = (String) timeBox.getSelectedItem();
         String reason = reasonBox.getText().trim();
 
+        if (currentStudentId().isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Log in as a student before booking.");
+            return;
+        }
+
         if (advisor == null || day == null || time == null) {
             JOptionPane.showMessageDialog(this, "Please select advisor, day, and time.");
             return;
@@ -330,7 +330,7 @@ public class StudentBookingsPanel extends JPanel {
 
         // Create and store the request in the shared "database"
         MockBookingStore.BookingRequest req =
-                new MockBookingStore.BookingRequest(requestId, currentStudentId, currentStudentName,
+                new MockBookingStore.BookingRequest(requestId, currentStudentId(), currentStudentName(),
                         advisor, day, time, reason);
 
         store.addRequest(req);
@@ -342,6 +342,16 @@ public class StudentBookingsPanel extends JPanel {
         refreshMyRequests();
 
         JOptionPane.showMessageDialog(this, "Booking request submitted. Status: REQUESTED");
+    }
+
+    private String currentStudentId() {
+        UserRecord user = app.getCurrentUser();
+        return user == null ? "" : user.id;
+    }
+
+    private String currentStudentName() {
+        UserRecord user = app.getCurrentUser();
+        return user == null ? "Student" : user.name;
     }
 
     // ============================================================
