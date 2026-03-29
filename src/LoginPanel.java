@@ -174,7 +174,46 @@ public class LoginPanel extends JPanel {
         // Same size as Login button
         signupBtn.setPreferredSize(authBtnSize);
 
-        signupBtn.addActionListener(e -> handleSignup());
+        signupBtn.addActionListener(e -> {
+            String name = nameField.getText().trim();
+            String id   = idField.getText().trim();
+
+            // Basic validation
+            if (name.isEmpty() || id.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Please enter both Name and ID before signing up.",
+                        "Missing Information",
+                        JOptionPane.WARNING_MESSAGE
+                );
+                return;
+            }
+
+            // Role comes from RoleSelect screen
+            String roleStr = app.getSelectedRole();
+            if (roleStr == null) {
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Please select Student or Faculty/Staff first.",
+                        "Role Missing",
+                        JOptionPane.WARNING_MESSAGE
+                );
+                app.showScreen("role_select");
+                return;
+            }
+
+            UserRole role = roleStr.equals("STUDENT") ? UserRole.STUDENT : UserRole.FACULTY_STAFF;
+
+            // ✅ This is the important line: create a PENDING request in AuthService
+            String result = auth.requestSignup(name, id, role);
+
+            JOptionPane.showMessageDialog(
+                    this,
+                    result,
+                    "Sign Up",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+        });
 
         signupButtonRow.add(signupBtn);
         content.add(signupButtonRow);
