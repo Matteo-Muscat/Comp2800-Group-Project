@@ -4,32 +4,34 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class FacultySchedulingPanel extends JPanel {
 
-    private static final Color BLUE   = new Color(0x005A9C);
-    private static final Color GRAY   = new Color(0x555555);
+    private static final Color BLUE = new Color(0x005A9C);
+    private static final Color GRAY = new Color(0x555555);
     private static final Color YELLOW = new Color(0xFFC72C);
-    private static final Color WHITE  = Color.WHITE;
+    private static final Color WHITE = Color.WHITE;
 
     private final MyAdviceApp app;
-    private final SchedulingStore schedulingStore;
+    private final AppBackend backend;
 
     private final JComboBox<String> termBox = new JComboBox<>();
-
     private final DefaultTableModel sectionModel;
     private final DefaultTableModel meetingModel;
-
     private final JTable sectionTable;
     private final JTable meetingTable;
 
-    private final Map<String, List<SchedulingStore.MeetingRecord>> draftMeetingsBySection = new LinkedHashMap<>();
+    private final Map<String, BackendModels.Term> termsByName = new LinkedHashMap<>();
+    private final Map<String, List<BackendModels.SectionMeeting>> draftMeetingsBySection = new LinkedHashMap<>();
+    private final Set<Integer> loadedSectionIds = new LinkedHashSet<>();
 
-    public FacultySchedulingPanel(MyAdviceApp app, SchedulingStore schedulingStore) {
+    public FacultySchedulingPanel(MyAdviceApp app, AppBackend backend) {
         this.app = app;
-        this.schedulingStore = schedulingStore;
+        this.backend = backend;
 
         setLayout(new BorderLayout());
         setBackground(WHITE);
@@ -37,29 +39,15 @@ public class FacultySchedulingPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
 
         String[] sectionCols = {
-                "Course ID", "Course Name", "Section", "Professor", "Building", "Room"
+                "Section ID", "Course ID", "Course Name", "Section", "Professor", "Building", "Room"
         };
-        String[] meetingCols = {
-                "Day", "Start Time", "End Time"
-        };
+        String[] meetingCols = {"Day", "Start Time", "End Time"};
 
-        sectionModel = new DefaultTableModel(sectionCols, 0) {
-            @Override
-            public boolean isCellEditable(int row, int col) {
-                return true;
-            }
-        };
-
-        meetingModel = new DefaultTableModel(meetingCols, 0) {
-            @Override
-            public boolean isCellEditable(int row, int col) {
-                return true;
-            }
-        };
+        sectionModel = createEditableModel(sectionCols);
+        meetingModel = createEditableModel(meetingCols);
 
         sectionTable = new JTable(sectionModel);
         meetingTable = new JTable(meetingModel);
-
         sectionTable.setRowHeight(22);
         meetingTable.setRowHeight(22);
 
@@ -74,6 +62,15 @@ public class FacultySchedulingPanel extends JPanel {
                 loadMeetingsForSelectedSection();
             }
         });
+    }
+
+    private DefaultTableModel createEditableModel(String[] cols) {
+        return new DefaultTableModel(cols, 0) {
+            @Override
+            public boolean isCellEditable(int row, int col) {
+                return true;
+            }
+        };
     }
 
     private JComponent buildHeader() {
@@ -104,32 +101,28 @@ public class FacultySchedulingPanel extends JPanel {
 
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         left.setBackground(WHITE);
-
         JLabel termLbl = new JLabel("Term:");
         termLbl.setForeground(GRAY);
         termLbl.setFont(termLbl.getFont().deriveFont(Font.BOLD, 16f));
-
         termBox.addActionListener(e -> loadSectionsForSelectedTerm());
-
         left.add(termLbl);
         left.add(termBox);
 
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         right.setBackground(WHITE);
-
         JButton refresh = new JButton("Reload");
         makeActionButton(refresh, BLUE);
         refresh.addActionListener(e -> loadSectionsForSelectedTerm());
-
         right.add(refresh);
 
         topRow.add(left, BorderLayout.WEST);
         topRow.add(right, BorderLayout.EAST);
 
-        JPanel sectionCard = wrapTable("Sections", sectionTable);
-        JPanel meetingCard = wrapTable("Meetings for Selected Section", meetingTable);
-
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, sectionCard, meetingCard);
+        JSplitPane split = new JSplitPane(
+                JSplitPane.VERTICAL_SPLIT,
+                wrapTable("Sections", sectionTable),
+                wrapTable("Meetings for Selected Section", meetingTable)
+        );
         split.setResizeWeight(0.60);
         split.setDividerSize(8);
         split.setContinuousLayout(true);
@@ -140,24 +133,23 @@ public class FacultySchedulingPanel extends JPanel {
 
         JButton addSection = new JButton("Add Section");
         makeActionButton(addSection, BLUE);
+        addSection.addActionListener(e -> addSectionRow());
 
         JButton deleteSection = new JButton("Delete Section");
         makeActionButton(deleteSection, GRAY);
+        deleteSection.addActionListener(e -> deleteSelectedSection());
 
         JButton addMeeting = new JButton("Add Meeting");
         makeActionButton(addMeeting, BLUE);
+        addMeeting.addActionListener(e -> addMeetingRow());
 
         JButton deleteMeeting = new JButton("Delete Meeting");
         makeActionButton(deleteMeeting, GRAY);
+        deleteMeeting.addActionListener(e -> deleteSelectedMeeting());
 
         JButton save = new JButton("Save Changes");
         makeActionButton(save, YELLOW);
         save.setForeground(Color.BLACK);
-
-        addSection.addActionListener(e -> addSectionRow());
-        deleteSection.addActionListener(e -> deleteSelectedSection());
-        addMeeting.addActionListener(e -> addMeetingRow());
-        deleteMeeting.addActionListener(e -> deleteSelectedMeeting());
         save.addActionListener(e -> saveChanges());
 
         actions.add(addSection);
@@ -182,8 +174,10 @@ public class FacultySchedulingPanel extends JPanel {
 
     private void loadTerms() {
         termBox.removeAllItems();
-        for (String term : schedulingStore.getTerms()) {
-            termBox.addItem(term);
+        termsByName.clear();
+        for (BackendModels.Term term : backend.getTerms()) {
+            termsByName.put(term.termName(), term);
+            termBox.addItem(term.termName());
         }
         if (termBox.getItemCount() > 0) {
             termBox.setSelectedIndex(0);
@@ -193,20 +187,29 @@ public class FacultySchedulingPanel extends JPanel {
     private void loadSectionsForSelectedTerm() {
         captureCurrentMeetings();
         draftMeetingsBySection.clear();
+        loadedSectionIds.clear();
         sectionModel.setRowCount(0);
         meetingModel.setRowCount(0);
 
-        List<SchedulingStore.SectionRecord> sections = schedulingStore.getSectionsForTerm(selectedTerm());
-        for (SchedulingStore.SectionRecord section : sections) {
+        BackendModels.Term term = selectedTerm();
+        if (term == null) {
+            return;
+        }
+
+        List<BackendModels.Section> sections = backend.getSectionsForTerm(term.termId());
+        for (BackendModels.Section section : sections) {
             sectionModel.addRow(new Object[]{
-                    section.courseId,
-                    section.courseName,
-                    section.section,
-                    section.professor,
-                    section.building,
-                    section.room
+                    section.sectionId(),
+                    section.courseCode(),
+                    section.courseName(),
+                    section.sectionNumber(),
+                    section.instructorName(),
+                    section.building(),
+                    section.room()
             });
-            draftMeetingsBySection.put(section.key(), copyMeetings(section.meetings));
+            loadedSectionIds.add(section.sectionId());
+            draftMeetingsBySection.put(sectionKey(section.sectionId(), section.courseCode(), section.sectionNumber()),
+                    copyMeetings(section.meetings()));
         }
 
         if (sectionTable.getRowCount() > 0) {
@@ -222,20 +225,22 @@ public class FacultySchedulingPanel extends JPanel {
             return;
         }
 
-        List<SchedulingStore.MeetingRecord> meetings =
-                draftMeetingsBySection.getOrDefault(currentSectionKey(), List.of());
-        for (SchedulingStore.MeetingRecord meeting : meetings) {
-            meetingModel.addRow(new Object[]{meeting.day, meeting.startTime, meeting.endTime});
+        for (BackendModels.SectionMeeting meeting : draftMeetingsBySection.getOrDefault(currentSectionKey(), List.of())) {
+            meetingModel.addRow(new Object[]{
+                    ApiDataMapper.shortDay(meeting.dayOfWeek()),
+                    ApiDataMapper.trimSeconds(meeting.startTime()),
+                    ApiDataMapper.trimSeconds(meeting.endTime())
+            });
         }
     }
 
     private void addSectionRow() {
-        sectionModel.addRow(new Object[]{"COMP-XXXX", "New Course", "000", "TBD", "TBD", "TBD"});
+        sectionModel.addRow(new Object[]{"", "COMP-XXXX", "New Course", "01", currentFacultyName(), "TBD", "TBD"});
         int last = sectionModel.getRowCount() - 1;
         if (last >= 0) {
             sectionTable.setRowSelectionInterval(last, last);
             draftMeetingsBySection.put(currentSectionKey(), new ArrayList<>(List.of(
-                    new SchedulingStore.MeetingRecord("TR", "09:00", "10:20")
+                    new BackendModels.SectionMeeting(null, null, "MON", "09:00", "10:20")
             )));
             loadMeetingsForSelectedSection();
         }
@@ -264,7 +269,7 @@ public class FacultySchedulingPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "Select a section first.");
             return;
         }
-        meetingModel.addRow(new Object[]{"TR", "09:00", "10:20"});
+        meetingModel.addRow(new Object[]{"MON", "09:00", "10:20"});
         captureCurrentMeetings();
     }
 
@@ -280,30 +285,42 @@ public class FacultySchedulingPanel extends JPanel {
 
     private void saveChanges() {
         captureCurrentMeetings();
-
-        List<SchedulingStore.SectionRecord> sections = new ArrayList<>();
-        for (int row = 0; row < sectionModel.getRowCount(); row++) {
-            String courseId = value(sectionModel, row, 0);
-            String courseName = value(sectionModel, row, 1);
-            String section = value(sectionModel, row, 2);
-            String professor = value(sectionModel, row, 3);
-            String building = value(sectionModel, row, 4);
-            String room = value(sectionModel, row, 5);
-            String key = courseId + "::" + section;
-
-            sections.add(new SchedulingStore.SectionRecord(
-                    selectedTerm(),
-                    courseId,
-                    courseName,
-                    section,
-                    professor,
-                    building,
-                    room,
-                    copyMeetings(draftMeetingsBySection.getOrDefault(key, List.of()))
-            ));
+        BackendModels.Term term = selectedTerm();
+        if (term == null) {
+            return;
         }
 
-        schedulingStore.replaceSectionsForTerm(selectedTerm(), sections);
+        Set<Integer> currentIds = new LinkedHashSet<>();
+
+        for (int row = 0; row < sectionModel.getRowCount(); row++) {
+            Integer sectionId = nullableInt(sectionModel.getValueAt(row, 0));
+            String courseCode = value(sectionModel, row, 1);
+            String sectionNumber = value(sectionModel, row, 3);
+            String professor = value(sectionModel, row, 4);
+            String building = value(sectionModel, row, 5);
+            String room = value(sectionModel, row, 6);
+            int instructorUserId = backend.resolveInstructorUserId(professor, currentFacultyUserId());
+
+            if (sectionId == null) {
+                BackendModels.Section created = backend.createSection(
+                        courseCode, term.termId(), sectionNumber, instructorUserId, building, room);
+                backend.replaceMeetings(created.sectionId(), draftMeetingsBySection.getOrDefault(
+                        sectionKey(null, courseCode, sectionNumber), List.of()));
+                currentIds.add(created.sectionId());
+            } else {
+                backend.updateSection(sectionId, courseCode, term.termId(), sectionNumber, instructorUserId, building, room);
+                backend.replaceMeetings(sectionId, draftMeetingsBySection.getOrDefault(
+                        sectionKey(sectionId, courseCode, sectionNumber), List.of()));
+                currentIds.add(sectionId);
+            }
+        }
+
+        for (Integer loadedId : loadedSectionIds) {
+            if (!currentIds.contains(loadedId)) {
+                backend.deleteSection(loadedId);
+            }
+        }
+
         loadSectionsForSelectedTerm();
         JOptionPane.showMessageDialog(this, "Scheduling changes saved.");
     }
@@ -316,11 +333,13 @@ public class FacultySchedulingPanel extends JPanel {
         draftMeetingsBySection.put(currentSectionKey(), meetingsFromTable());
     }
 
-    private List<SchedulingStore.MeetingRecord> meetingsFromTable() {
-        List<SchedulingStore.MeetingRecord> meetings = new ArrayList<>();
+    private List<BackendModels.SectionMeeting> meetingsFromTable() {
+        List<BackendModels.SectionMeeting> meetings = new ArrayList<>();
         for (int row = 0; row < meetingModel.getRowCount(); row++) {
-            meetings.add(new SchedulingStore.MeetingRecord(
-                    value(meetingModel, row, 0),
+            meetings.add(new BackendModels.SectionMeeting(
+                    null,
+                    null,
+                    value(meetingModel, row, 0).toUpperCase(),
                     value(meetingModel, row, 1),
                     value(meetingModel, row, 2)
             ));
@@ -328,10 +347,16 @@ public class FacultySchedulingPanel extends JPanel {
         return meetings;
     }
 
-    private List<SchedulingStore.MeetingRecord> copyMeetings(List<SchedulingStore.MeetingRecord> meetings) {
-        List<SchedulingStore.MeetingRecord> copy = new ArrayList<>();
-        for (SchedulingStore.MeetingRecord meeting : meetings) {
-            copy.add(new SchedulingStore.MeetingRecord(meeting.day, meeting.startTime, meeting.endTime));
+    private List<BackendModels.SectionMeeting> copyMeetings(List<BackendModels.SectionMeeting> meetings) {
+        List<BackendModels.SectionMeeting> copy = new ArrayList<>();
+        for (BackendModels.SectionMeeting meeting : meetings) {
+            copy.add(new BackendModels.SectionMeeting(
+                    meeting.meetingId(),
+                    meeting.sectionId(),
+                    meeting.dayOfWeek(),
+                    ApiDataMapper.trimSeconds(meeting.startTime()),
+                    ApiDataMapper.trimSeconds(meeting.endTime())
+            ));
         }
         return copy;
     }
@@ -341,17 +366,36 @@ public class FacultySchedulingPanel extends JPanel {
         if (row == -1) {
             return "";
         }
-        return value(sectionModel, row, 0) + "::" + value(sectionModel, row, 2);
+        return sectionKey(nullableInt(sectionModel.getValueAt(row, 0)), value(sectionModel, row, 1), value(sectionModel, row, 3));
     }
 
-    private String selectedTerm() {
+    private String sectionKey(Integer sectionId, String courseCode, String sectionNumber) {
+        return (sectionId == null ? "new" : sectionId) + "::" + courseCode + "::" + sectionNumber;
+    }
+
+    private BackendModels.Term selectedTerm() {
         Object value = termBox.getSelectedItem();
-        return value == null ? "" : value.toString();
+        return value == null ? null : termsByName.get(value.toString());
+    }
+
+    private String currentFacultyName() {
+        UserRecord user = app.getCurrentUser();
+        return user == null ? "Faculty/Staff" : user.name;
+    }
+
+    private int currentFacultyUserId() {
+        UserRecord user = app.getCurrentUser();
+        return user == null ? 0 : Integer.parseInt(user.id);
+    }
+
+    private Integer nullableInt(Object value) {
+        String text = value == null ? "" : value.toString().trim();
+        return text.isEmpty() ? null : Integer.parseInt(text);
     }
 
     private String value(DefaultTableModel model, int row, int column) {
         Object value = model.getValueAt(row, column);
-        return value == null ? "" : value.toString();
+        return value == null ? "" : value.toString().trim();
     }
 
     private void makeSmallButton(JButton btn) {

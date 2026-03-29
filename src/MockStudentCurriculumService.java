@@ -134,6 +134,20 @@ public class MockStudentCurriculumService implements StudentCurriculumPanel.Stud
         MockInquiryStore.getInstance().addInquiry(studentId, studentName, message);
     }
 
+    @Override
+    public List<StudentCurriculumPanel.FacultyResponse> getResponses(String studentId) {
+        List<StudentCurriculumPanel.FacultyResponse> responses = new ArrayList<>();
+        for (MockInquiryStore.Response response : MockInquiryStore.getInstance().getResponsesForStudent(studentId)) {
+            responses.add(new StudentCurriculumPanel.FacultyResponse(
+                    response.inquiryId,
+                    response.facultyName,
+                    response.body,
+                    response.createdAt
+            ));
+        }
+        return responses;
+    }
+
     // ============================================
     // Helper: extract course code from display text
     // ============================================

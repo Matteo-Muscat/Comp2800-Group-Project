@@ -1,6 +1,7 @@
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 
 public class StudentCurriculumPanel extends JPanel {
@@ -27,8 +28,7 @@ public class StudentCurriculumPanel extends JPanel {
     private final DefaultListModel<String> notifModel = new DefaultListModel<>();
     private final JList<String> notifList = new JList<>(notifModel);
     private final JTextArea notifView = new JTextArea();
-    private final JTextArea advisorOutput = new JTextArea();
-
+    private final List<String> notifDetails = new ArrayList<>();
     public StudentCurriculumPanel(MyAdviceApp app, StudentCurriculumService service) {
         this.app = app;
         this.service = service;
@@ -37,7 +37,7 @@ public class StudentCurriculumPanel extends JPanel {
         setBackground(WHITE);
 
         add(buildHeader(), BorderLayout.NORTH);
-        add(buildMainSplit(), BorderLayout.CENTER);
+        add(buildTopTools(), BorderLayout.CENTER);
 
         loadStudentData();
         refreshNotifications();
@@ -59,19 +59,6 @@ public class StudentCurriculumPanel extends JPanel {
         header.add(title, BorderLayout.WEST);
         header.add(back, BorderLayout.EAST);
         return header;
-    }
-
-    private JComponent buildMainSplit() {
-        JPanel top = buildTopTools();
-        JScrollPane bottom = buildAdvisorOutput();
-
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, top, bottom);
-        split.setResizeWeight(0.72);
-        split.setDividerSize(8);
-        split.setContinuousLayout(true);
-        split.setDividerLocation(380);
-
-        return split;
     }
 
     private JPanel buildTopTools() {
@@ -127,20 +114,31 @@ public class StudentCurriculumPanel extends JPanel {
     }
 
     private JPanel buildRightColumn() {
-        JPanel right = new JPanel(new GridLayout(3, 1, 0, 15));
+        JPanel right = new JPanel(new GridBagLayout());
         right.setBackground(WHITE);
 
         JPanel searchCard = buildSearchCard();
         JPanel reachCard = buildReachOutCard();
         JPanel notifCard = buildNotificationsCard();
 
-        searchCard.setPreferredSize(new Dimension(1, 240));
-        reachCard.setPreferredSize(new Dimension(1, 200));
-        notifCard.setPreferredSize(new Dimension(1, 220));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.BOTH;
 
-        right.add(searchCard);
-        right.add(reachCard);
-        right.add(notifCard);
+        gbc.gridy = 0;
+        gbc.weighty = 0.18;
+        gbc.insets = new Insets(0, 0, 15, 0);
+        right.add(searchCard, gbc);
+
+        gbc.gridy = 1;
+        gbc.weighty = 0.34;
+        right.add(reachCard, gbc);
+
+        gbc.gridy = 2;
+        gbc.weighty = 0.48;
+        gbc.insets = new Insets(0, 0, 0, 0);
+        right.add(notifCard, gbc);
 
         return right;
     }
@@ -203,24 +201,38 @@ public class StudentCurriculumPanel extends JPanel {
 
         List<String> results = service.searchCourses(q);
         if (results.isEmpty()) {
-            appendAdvisor("Search: no results for \"" + q + "\"");
+            JOptionPane.showMessageDialog(this,
+                    "No results found for \"" + q + "\".",
+                    "Search",
+                    JOptionPane.INFORMATION_MESSAGE);
             return;
         }
 
         for (String result : results) {
             searchModel.addElement(result);
         }
-        appendAdvisor("Search: found " + results.size() + " result(s) for \"" + q + "\"");
     }
 
     private void checkCoursePrereqs(String courseDisplay) {
         if (currentStudentId().isEmpty()) {
-            appendAdvisor("No logged-in student is available for prerequisite checking.");
+            JOptionPane.showMessageDialog(
+                    this,
+                    "No logged-in student is available for prerequisite checking.",
+                    "Prerequisite Check",
+                    JOptionPane.WARNING_MESSAGE
+            );
             return;
         }
 
         PrereqResult result = service.checkPrereqs(currentStudentId(), courseDisplay);
-        appendAdvisor(result.detailMessage);
+        JOptionPane.showMessageDialog(
+                this,
+                result.detailMessage,
+                "Prerequisite Check",
+                "Met".equalsIgnoreCase(result.statusText) || "MET".equalsIgnoreCase(result.statusText)
+                        ? JOptionPane.INFORMATION_MESSAGE
+                        : JOptionPane.WARNING_MESSAGE
+        );
     }
 
     private JPanel buildReachOutCard() {
@@ -242,7 +254,7 @@ public class StudentCurriculumPanel extends JPanel {
 
         JScrollPane reachScroll = new JScrollPane(reachOutBox);
         reachScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-        reachScroll.setPreferredSize(new Dimension(1, 110));
+        reachScroll.setPreferredSize(new Dimension(1, 165));
 
         JButton send = new JButton("Send Inquiry");
         makeActionButton(send, YELLOW);
@@ -262,11 +274,14 @@ public class StudentCurriculumPanel extends JPanel {
             }
 
             service.sendBroadcastInquiry(currentStudentId(), currentStudentName(), msg);
-            appendAdvisor("Inquiry sent to faculty/staff: " + msg);
 
             reachOutBox.setText("");
             reachOutBox.requestFocusInWindow();
             refreshNotifications();
+            JOptionPane.showMessageDialog(this,
+                    "Inquiry sent to faculty/staff.",
+                    "Inquiry Sent",
+                    JOptionPane.INFORMATION_MESSAGE);
         });
 
         JPanel bottomRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
@@ -295,9 +310,9 @@ public class StudentCurriculumPanel extends JPanel {
 
         notifList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
-                String selected = notifList.getSelectedValue();
-                if (selected != null) {
-                    notifView.setText(selected);
+                int index = notifList.getSelectedIndex();
+                if (index >= 0 && index < notifDetails.size()) {
+                    notifView.setText(notifDetails.get(index));
                     notifView.setCaretPosition(0);
                 }
             }
@@ -308,7 +323,7 @@ public class StudentCurriculumPanel extends JPanel {
                 new JScrollPane(notifList),
                 new JScrollPane(notifView)
         );
-        split.setResizeWeight(0.55);
+        split.setResizeWeight(0.38);
         split.setDividerSize(8);
         split.setContinuousLayout(true);
 
@@ -325,27 +340,9 @@ public class StudentCurriculumPanel extends JPanel {
         return card;
     }
 
-    private JScrollPane buildAdvisorOutput() {
-        advisorOutput.setEditable(false);
-        advisorOutput.setLineWrap(true);
-        advisorOutput.setWrapStyleWord(true);
-        advisorOutput.setFont(advisorOutput.getFont().deriveFont(14f));
-        advisorOutput.setBackground(WHITE);
-        advisorOutput.setBorder(new EmptyBorder(10, 10, 10, 10));
-
-        JScrollPane scroll = new JScrollPane(advisorOutput);
-        scroll.setBorder(BorderFactory.createTitledBorder("Advisor Output"));
-        scroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
-        return scroll;
-    }
-
-    private void appendAdvisor(String msg) {
-        advisorOutput.append("- " + msg + "\n");
-        advisorOutput.setCaretPosition(advisorOutput.getDocument().getLength());
-    }
-
     private void refreshNotifications() {
         notifModel.clear();
+        notifDetails.clear();
 
         if (currentStudentId().isEmpty()) {
             notifModel.addElement("Log in as a student to view faculty responses.");
@@ -353,8 +350,7 @@ public class StudentCurriculumPanel extends JPanel {
             return;
         }
 
-        List<MockInquiryStore.Response> responses =
-                MockInquiryStore.getInstance().getResponsesForStudent(currentStudentId());
+        List<FacultyResponse> responses = service.getResponses(currentStudentId());
 
         if (responses.isEmpty()) {
             notifModel.addElement("No faculty responses yet.");
@@ -362,12 +358,13 @@ public class StudentCurriculumPanel extends JPanel {
             return;
         }
 
-        for (MockInquiryStore.Response response : responses) {
-            String line =
-                    "From: " + response.facultyName + "\n" +
-                    "Time: " + response.createdAt + "\n\n" +
-                    response.body;
-            notifModel.addElement(line);
+        for (FacultyResponse response : responses) {
+            String relatedInquiry = response.originalInquiryText == null || response.originalInquiryText.isBlank()
+                    ? "(original student message unavailable)"
+                    : response.originalInquiryText;
+
+            notifModel.addElement(buildResponseSummary(response, relatedInquiry));
+            notifDetails.add(buildResponseDetail(response, relatedInquiry));
         }
 
         notifList.setSelectedIndex(0);
@@ -377,7 +374,6 @@ public class StudentCurriculumPanel extends JPanel {
         completedModel.clear();
         suggestedModel.clear();
         searchModel.clear();
-        advisorOutput.setText("");
 
         for (String course : service.getCompletedCourses(currentStudentId())) {
             completedModel.addElement(course);
@@ -386,8 +382,6 @@ public class StudentCurriculumPanel extends JPanel {
         for (String course : service.getSuggestedCourses(currentStudentId())) {
             suggestedModel.addElement(course);
         }
-
-        appendAdvisor("Loaded student curriculum data.");
     }
 
     private String currentStudentId() {
@@ -425,12 +419,46 @@ public class StudentCurriculumPanel extends JPanel {
         btn.setFont(btn.getFont().deriveFont(Font.BOLD, 14f));
     }
 
+    private String buildResponseSummary(FacultyResponse response, String relatedInquiry) {
+        return "Reply to \"" + preview(relatedInquiry, 40) + "\" from "
+                + response.facultyName + " at " + formatTimestamp(response.createdAt);
+    }
+
+    private String buildResponseDetail(FacultyResponse response, String relatedInquiry) {
+        return "In response to:\n"
+                + relatedInquiry
+                + "\n\nFrom: "
+                + response.facultyName
+                + "\nTime: "
+                + formatTimestamp(response.createdAt)
+                + "\n\nResponse:\n"
+                + response.body;
+    }
+
+    private String preview(String text, int maxLen) {
+        String normalized = text.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= maxLen) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLen - 3) + "...";
+    }
+
+    private String formatTimestamp(String timestamp) {
+        if (timestamp == null || timestamp.isBlank()) {
+            return "";
+        }
+        String cleaned = timestamp.replace('T', ' ');
+        int dot = cleaned.indexOf('.');
+        return dot >= 0 ? cleaned.substring(0, dot) : cleaned;
+    }
+
     public interface StudentCurriculumService {
         List<String> getCompletedCourses(String studentId);
         List<String> getSuggestedCourses(String studentId);
         List<String> searchCourses(String query);
         PrereqResult checkPrereqs(String studentId, String courseCode);
         void sendBroadcastInquiry(String studentId, String studentName, String message);
+        List<FacultyResponse> getResponses(String studentId);
     }
 
     public static class PrereqResult {
@@ -440,6 +468,27 @@ public class StudentCurriculumPanel extends JPanel {
         public PrereqResult(String statusText, String detailMessage) {
             this.statusText = statusText;
             this.detailMessage = detailMessage;
+        }
+    }
+
+    public static class FacultyResponse {
+        public final String responseId;
+        public final String facultyName;
+        public final String body;
+        public final String createdAt;
+        public final String originalInquiryText;
+
+        public FacultyResponse(String responseId, String facultyName, String body, String createdAt) {
+            this(responseId, facultyName, body, createdAt, null);
+        }
+
+        public FacultyResponse(String responseId, String facultyName, String body, String createdAt,
+                               String originalInquiryText) {
+            this.responseId = responseId;
+            this.facultyName = facultyName;
+            this.body = body;
+            this.createdAt = createdAt;
+            this.originalInquiryText = originalInquiryText;
         }
     }
 }

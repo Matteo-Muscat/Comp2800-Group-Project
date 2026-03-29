@@ -2,29 +2,32 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class StudentSchedulingPanel extends JPanel {
 
-    private static final Color BLUE   = new Color(0x005A9C);
-    private static final Color GRAY   = new Color(0x555555);
+    private static final Color BLUE = new Color(0x005A9C);
+    private static final Color GRAY = new Color(0x555555);
     private static final Color YELLOW = new Color(0xFFC72C);
-    private static final Color WHITE  = Color.WHITE;
+    private static final Color WHITE = Color.WHITE;
 
     private final MyAdviceApp app;
-    private final SchedulingStore schedulingStore;
+    private final AppBackend backend;
 
     private final DefaultTableModel availableModel;
     private final DefaultTableModel scheduleModel;
 
     private final JTable availableTable;
     private final JTable scheduleTable;
-
     private final JComboBox<String> termBox = new JComboBox<>();
 
-    public StudentSchedulingPanel(MyAdviceApp app, SchedulingStore schedulingStore) {
+    private final Map<String, BackendModels.Term> termsByName = new LinkedHashMap<>();
+
+    public StudentSchedulingPanel(MyAdviceApp app, AppBackend backend) {
         this.app = app;
-        this.schedulingStore = schedulingStore;
+        this.backend = backend;
 
         setLayout(new BorderLayout());
         setBackground(WHITE);
@@ -32,33 +35,14 @@ public class StudentSchedulingPanel extends JPanel {
         add(buildHeader(), BorderLayout.NORTH);
 
         String[] cols = {
-                "Course ID",
-                "Course Name",
-                "Section",
-                "Days",
-                "Time",
-                "Professor",
-                "Building",
-                "Room"
+                "Section ID", "Course ID", "Course Name", "Section", "Days", "Time", "Professor", "Building", "Room"
         };
 
-        availableModel = new DefaultTableModel(cols, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
-
-        scheduleModel = new DefaultTableModel(cols, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
+        availableModel = createTableModel(cols);
+        scheduleModel = createTableModel(cols);
 
         availableTable = new JTable(availableModel);
         scheduleTable = new JTable(scheduleModel);
-
         availableTable.setRowHeight(22);
         scheduleTable.setRowHeight(22);
 
@@ -66,6 +50,15 @@ public class StudentSchedulingPanel extends JPanel {
 
         loadTerms();
         refreshTables();
+    }
+
+    private DefaultTableModel createTableModel(String[] cols) {
+        return new DefaultTableModel(cols, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
     }
 
     private JComponent buildHeader() {
@@ -94,17 +87,9 @@ public class StudentSchedulingPanel extends JPanel {
         JPanel topRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 0));
         topRow.setBackground(WHITE);
 
-        JLabel studentLbl = new JLabel("Student:");
-        studentLbl.setForeground(GRAY);
-        studentLbl.setFont(studentLbl.getFont().deriveFont(Font.BOLD, 16f));
-
-        JLabel studentVal = new JLabel(currentStudentDisplay());
-        studentVal.setForeground(GRAY);
-        studentVal.setFont(studentVal.getFont().deriveFont(Font.BOLD, 16f));
-
-        JLabel termLbl = new JLabel("Term:");
-        termLbl.setForeground(GRAY);
-        termLbl.setFont(termLbl.getFont().deriveFont(Font.BOLD, 16f));
+        JLabel studentLbl = makeLabel("Student:");
+        JLabel studentVal = makeLabel(currentStudentDisplay());
+        JLabel termLbl = makeLabel("Term:");
 
         termBox.addActionListener(e -> refreshTables());
 
@@ -143,7 +128,6 @@ public class StudentSchedulingPanel extends JPanel {
         body.add(topRow, BorderLayout.NORTH);
         body.add(tables, BorderLayout.CENTER);
         body.add(actions, BorderLayout.SOUTH);
-
         return body;
     }
 
@@ -157,9 +141,13 @@ public class StudentSchedulingPanel extends JPanel {
 
     private void loadTerms() {
         termBox.removeAllItems();
-        for (String term : schedulingStore.getTerms()) {
-            termBox.addItem(term);
+        termsByName.clear();
+
+        for (BackendModels.Term term : backend.getTerms()) {
+            termsByName.put(term.termName(), term);
+            termBox.addItem(term.termName());
         }
+
         if (termBox.getItemCount() > 0) {
             termBox.setSelectedIndex(0);
         }
@@ -172,22 +160,30 @@ public class StudentSchedulingPanel extends JPanel {
 
     private void loadAvailableSectionsForSelectedTerm() {
         availableModel.setRowCount(0);
+        BackendModels.Term term = selectedTerm();
+        if (term == null) {
+            return;
+        }
 
-        for (SchedulingStore.SectionRecord section : schedulingStore.getSectionsForTerm(selectedTerm())) {
+        for (BackendModels.Section section : backend.getSectionsForTerm(term.termId())) {
             availableModel.addRow(toRow(section));
         }
     }
 
     private void loadCurrentScheduleForSelectedTerm() {
         scheduleModel.setRowCount(0);
-
         if (currentStudentId().isEmpty()) {
             return;
         }
 
-        List<SchedulingStore.SectionRecord> sections =
-                schedulingStore.getStudentSchedule(currentStudentId(), selectedTerm());
-        for (SchedulingStore.SectionRecord section : sections) {
+        BackendModels.Term term = selectedTerm();
+        if (term == null) {
+            return;
+        }
+
+        List<BackendModels.Section> sections =
+                backend.getStudentSchedule(Integer.parseInt(currentStudentId()), term.termId());
+        for (BackendModels.Section section : sections) {
             scheduleModel.addRow(toRow(section));
         }
     }
@@ -204,13 +200,9 @@ public class StudentSchedulingPanel extends JPanel {
             return;
         }
 
-        String sectionKey = keyFromModel(availableModel, row);
-        boolean added = schedulingStore.addSectionToStudentSchedule(currentStudentId(), selectedTerm(), sectionKey);
-        if (!added) {
-            JOptionPane.showMessageDialog(this, "That section is already in your schedule.");
-            return;
-        }
-
+        BackendModels.Term term = selectedTerm();
+        int sectionId = Integer.parseInt(String.valueOf(availableModel.getValueAt(row, 0)));
+        backend.addSectionToSchedule(Integer.parseInt(currentStudentId()), term.termId(), sectionId);
         loadCurrentScheduleForSelectedTerm();
     }
 
@@ -221,7 +213,9 @@ public class StudentSchedulingPanel extends JPanel {
             return;
         }
 
-        schedulingStore.removeSectionFromStudentSchedule(currentStudentId(), selectedTerm(), keyFromModel(scheduleModel, row));
+        BackendModels.Term term = selectedTerm();
+        int sectionId = Integer.parseInt(String.valueOf(scheduleModel.getValueAt(row, 0)));
+        backend.removeSectionFromSchedule(Integer.parseInt(currentStudentId()), term.termId(), sectionId);
         loadCurrentScheduleForSelectedTerm();
     }
 
@@ -229,38 +223,39 @@ public class StudentSchedulingPanel extends JPanel {
         if (currentStudentId().isEmpty()) {
             return;
         }
-        schedulingStore.clearStudentSchedule(currentStudentId(), selectedTerm());
+        BackendModels.Term term = selectedTerm();
+        if (term == null) {
+            return;
+        }
+        backend.clearSchedule(Integer.parseInt(currentStudentId()), term.termId());
         loadCurrentScheduleForSelectedTerm();
     }
 
-    private Object[] toRow(SchedulingStore.SectionRecord section) {
+    private Object[] toRow(BackendModels.Section section) {
         StringBuilder days = new StringBuilder();
         StringBuilder times = new StringBuilder();
 
-        for (int i = 0; i < section.meetings.size(); i++) {
-            SchedulingStore.MeetingRecord meeting = section.meetings.get(i);
+        for (int i = 0; i < section.meetings().size(); i++) {
+            BackendModels.SectionMeeting meeting = section.meetings().get(i);
             if (i > 0) {
                 days.append(", ");
                 times.append(", ");
             }
-            days.append(meeting.day);
-            times.append(meeting.startTime).append("-").append(meeting.endTime);
+            days.append(ApiDataMapper.shortDay(meeting.dayOfWeek()));
+            times.append(ApiDataMapper.compactTimeRange(meeting.startTime(), meeting.endTime()));
         }
 
         return new Object[]{
-                section.courseId,
-                section.courseName,
-                section.section,
+                section.sectionId(),
+                section.courseCode(),
+                section.courseName(),
+                section.sectionNumber(),
                 days.toString(),
                 times.toString(),
-                section.professor,
-                section.building,
-                section.room
+                section.instructorName(),
+                section.building(),
+                section.room()
         };
-    }
-
-    private String keyFromModel(DefaultTableModel model, int row) {
-        return model.getValueAt(row, 0) + "::" + model.getValueAt(row, 2);
     }
 
     private String currentStudentId() {
@@ -273,9 +268,16 @@ public class StudentSchedulingPanel extends JPanel {
         return user == null ? "Student" : user.name + " (" + user.id + ")";
     }
 
-    private String selectedTerm() {
+    private BackendModels.Term selectedTerm() {
         Object value = termBox.getSelectedItem();
-        return value == null ? "" : value.toString();
+        return value == null ? null : termsByName.get(value.toString());
+    }
+
+    private JLabel makeLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setForeground(GRAY);
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 16f));
+        return label;
     }
 
     private void makeSmallButton(JButton btn) {

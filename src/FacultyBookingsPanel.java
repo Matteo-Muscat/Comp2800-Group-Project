@@ -4,43 +4,22 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
 
-/*
- * FacultyBookingsPanel
- * --------------------
- * Faculty/Staff version of Bookings.
- *
- * Updated:
- * - Adds a status filter dropdown:
- *      - Requested (default)
- *      - All
- *      - Approved
- *      - Denied
- * - Table refresh respects the selected filter
- *
- * Shared data:
- * - Uses MockBookingStore (same store student uses) so decisions update the student view.
- */
 public class FacultyBookingsPanel extends JPanel {
 
-    // ---- Color scheme (matches your app) ----
-    private static final Color BLUE   = new Color(0x005A9C);
-    private static final Color GRAY   = new Color(0x555555);
+    private static final Color BLUE = new Color(0x005A9C);
+    private static final Color GRAY = new Color(0x555555);
     private static final Color YELLOW = new Color(0xFFC72C);
-    private static final Color WHITE  = Color.WHITE;
+    private static final Color WHITE = Color.WHITE;
 
     private final MyAdviceApp app;
+    private final AppBackend backend;
 
-    // Shared mock store (acts like DB)
-    private final MockBookingStore store = MockBookingStore.getInstance();
-
-    // Filter dropdown
-    private final JComboBox<String> filterBox = new JComboBox<>(new String[] {
-            "Requested", "All", "Approved", "Denied"
+    private final JComboBox<String> filterBox = new JComboBox<>(new String[]{
+            "Requested", "All", "Approved", "Denied", "Cancelled"
     });
 
-    // Table model showing booking requests
     private final DefaultTableModel model = new DefaultTableModel(
-            new String[]{"Request #", "Student", "Advisor", "Day", "Time", "Reason", "Status", "Staff Message", "Created"},
+            new String[]{"Request #", "Student", "Advisor", "Date", "Time", "Reason", "Status", "Staff Message", "Created"},
             0
     ) {
         @Override
@@ -50,12 +29,11 @@ public class FacultyBookingsPanel extends JPanel {
     };
 
     private final JTable table = new JTable(model);
-
-    // Staff message box for deny/suggestion or approve note
     private final JTextArea staffMessageBox = new JTextArea(4, 30);
 
-    public FacultyBookingsPanel(MyAdviceApp app) {
+    public FacultyBookingsPanel(MyAdviceApp app, AppBackend backend) {
         this.app = app;
+        this.backend = backend;
 
         setLayout(new BorderLayout());
         setBackground(WHITE);
@@ -64,20 +42,11 @@ public class FacultyBookingsPanel extends JPanel {
         add(buildBody(), BorderLayout.CENTER);
 
         table.setRowHeight(22);
-
-        // Default view: Requested
         filterBox.setSelectedItem("Requested");
-
-        // Auto-refresh whenever filter changes
         filterBox.addActionListener(e -> refreshTable());
-
-        // Load requests into table initially
         refreshTable();
     }
 
-    /*
-     * Header bar: title + Back to Menu
-     */
     private JComponent buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(BLUE);
@@ -96,11 +65,6 @@ public class FacultyBookingsPanel extends JPanel {
         return header;
     }
 
-    /*
-     * Body:
-     * - Requests table card (with filter + refresh)
-     * - Decision card (approve/deny + suggestion message)
-     */
     private JComponent buildBody() {
         JPanel body = new JPanel(new BorderLayout(15, 15));
         body.setBackground(WHITE);
@@ -108,13 +72,9 @@ public class FacultyBookingsPanel extends JPanel {
 
         body.add(buildRequestsCard(), BorderLayout.CENTER);
         body.add(buildDecisionCard(), BorderLayout.SOUTH);
-
         return body;
     }
 
-    /*
-     * Table card with filter dropdown and refresh button.
-     */
     private JComponent buildRequestsCard() {
         JPanel card = new JPanel(new BorderLayout(10, 10));
         card.setBackground(WHITE);
@@ -123,7 +83,6 @@ public class FacultyBookingsPanel extends JPanel {
         JPanel top = new JPanel(new BorderLayout());
         top.setBackground(WHITE);
 
-        // Left: filter controls
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         left.setBackground(WHITE);
 
@@ -134,14 +93,12 @@ public class FacultyBookingsPanel extends JPanel {
         left.add(filterLbl);
         left.add(filterBox);
 
-        // Right: refresh button
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         right.setBackground(WHITE);
 
         JButton refresh = new JButton("Refresh");
         makeActionButton(refresh, BLUE);
         refresh.addActionListener(e -> refreshTable());
-
         right.add(refresh);
 
         top.add(left, BorderLayout.WEST);
@@ -149,22 +106,15 @@ public class FacultyBookingsPanel extends JPanel {
 
         card.add(top, BorderLayout.NORTH);
         card.add(new JScrollPane(table), BorderLayout.CENTER);
-
         return card;
     }
 
-    /*
-     * Approve/Deny card:
-     * - Staff types a message
-     * - Approve uses message as optional note
-     * - Deny requires message (alternate suggestion)
-     */
     private JComponent buildDecisionCard() {
         JPanel card = new JPanel(new BorderLayout(10, 10));
         card.setBackground(WHITE);
         card.setBorder(BorderFactory.createTitledBorder("Approve / Deny"));
 
-        JLabel hint = new JLabel("Select a request above. Add a message (required for Deny).");
+        JLabel hint = new JLabel("Select a request above. The note is used as the denial suggestion message.");
         hint.setForeground(GRAY);
 
         staffMessageBox.setLineWrap(true);
@@ -195,109 +145,93 @@ public class FacultyBookingsPanel extends JPanel {
         card.add(hint, BorderLayout.NORTH);
         card.add(msgScroll, BorderLayout.CENTER);
         card.add(actions, BorderLayout.SOUTH);
-
         return card;
     }
 
-    /*
-     * Refresh table with current filter.
-     */
     private void refreshTable() {
         model.setRowCount(0);
 
-        String filter = (String) filterBox.getSelectedItem(); // Requested/All/Approved/Denied
-        List<MockBookingStore.BookingRequest> requests = store.getAllRequests();
+        if (currentUserId().isEmpty()) {
+            return;
+        }
 
-        for (MockBookingStore.BookingRequest r : requests) {
+        boolean pendingOnly = "Requested".equals(filterBox.getSelectedItem());
+        List<BackendModels.Appointment> appointments =
+                backend.getAppointmentsForAdvisorUser(Integer.parseInt(currentUserId()), pendingOnly);
 
-            // Apply filter
-            if (!matchesFilter(r.status, filter)) continue;
+        for (BackendModels.Appointment appointment : appointments) {
+            if (!matchesFilter(appointment.status(), String.valueOf(filterBox.getSelectedItem()))) {
+                continue;
+            }
 
+            String message = appointment.suggestionMessage() == null ? "" : appointment.suggestionMessage();
             model.addRow(new Object[]{
-                    r.requestId,
-                    r.studentName + " (" + r.studentId + ")",
-                    r.advisor,
-                    r.day,
-                    r.time,
-                    r.reason,
-                    r.status,
-                    r.staffMessage,
-                    r.createdAt
+                    appointment.appointmentId(),
+                    appointment.studentName() + " (" + appointment.studentId() + ")",
+                    appointment.advisorName(),
+                    appointment.requestedDate(),
+                    ApiDataMapper.compactTimeRange(appointment.requestedStartTime(), appointment.requestedEndTime()),
+                    appointment.reason(),
+                    appointment.status(),
+                    message,
+                    appointment.createdAt()
             });
         }
     }
 
-    /*
-     * Returns true if a request status matches the selected filter.
-     */
     private boolean matchesFilter(String status, String filter) {
-        if ("All".equals(filter)) return true;
-        if ("Requested".equals(filter)) return "REQUESTED".equals(status);
-        if ("Approved".equals(filter)) return "APPROVED".equals(status);
-        if ("Denied".equals(filter)) return "DENIED".equals(status);
-        return true;
+        if ("All".equals(filter)) {
+            return true;
+        }
+        return filter != null && filter.equalsIgnoreCase(status);
     }
 
-    /*
-     * Approve selected request.
-     */
     private void approveSelected() {
-        int row = table.getSelectedRow();
-        if (row == -1) {
+        Integer appointmentId = selectedAppointmentId();
+        if (appointmentId == null) {
             JOptionPane.showMessageDialog(this, "Select a request first.");
             return;
         }
 
-        String requestId = (String) model.getValueAt(row, 0);
-        MockBookingStore.BookingRequest req = store.findById(requestId);
-        if (req == null) return;
-
-        String note = staffMessageBox.getText().trim();
-        if (note.isEmpty()) note = "Approved. See you then.";
-
-        req.status = "APPROVED";
-        req.staffMessage = note;
-
+        backend.approveAppointment(appointmentId);
         staffMessageBox.setText("");
         refreshTable();
-
-        JOptionPane.showMessageDialog(this, "Request " + requestId + " approved.");
+        JOptionPane.showMessageDialog(this, "Request " + appointmentId + " approved.");
     }
 
-    /*
-     * Deny selected request and require suggestion message.
-     */
     private void denySelected() {
-        int row = table.getSelectedRow();
-        if (row == -1) {
+        Integer appointmentId = selectedAppointmentId();
+        if (appointmentId == null) {
             JOptionPane.showMessageDialog(this, "Select a request first.");
             return;
         }
-
-        String requestId = (String) model.getValueAt(row, 0);
-        MockBookingStore.BookingRequest req = store.findById(requestId);
-        if (req == null) return;
 
         String msg = staffMessageBox.getText().trim();
         if (msg.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "Please type an alternate suggestion (e.g., \"Try Wed at 2:00pm\").");
+            JOptionPane.showMessageDialog(this, "Please type an alternate suggestion.");
             staffMessageBox.requestFocusInWindow();
             return;
         }
 
-        req.status = "DENIED";
-        req.staffMessage = msg;
-
+        backend.denyAppointment(appointmentId, msg);
         staffMessageBox.setText("");
         refreshTable();
-
-        JOptionPane.showMessageDialog(this, "Request " + requestId + " denied with suggestion.");
+        JOptionPane.showMessageDialog(this, "Request " + appointmentId + " denied with suggestion.");
     }
 
-    // ============================================================
-    // Button styling helpers
-    // ============================================================
+    private Integer selectedAppointmentId() {
+        int row = table.getSelectedRow();
+        if (row == -1) {
+            return null;
+        }
+        Object value = model.getValueAt(row, 0);
+        return value instanceof Number number ? number.intValue() : Integer.parseInt(String.valueOf(value));
+    }
+
+    private String currentUserId() {
+        UserRecord user = app.getCurrentUser();
+        return user == null ? "" : user.id;
+    }
 
     private void makeSmallButton(JButton btn) {
         btn.setBackground(YELLOW);

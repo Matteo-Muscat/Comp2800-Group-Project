@@ -39,12 +39,12 @@ public class MyAdviceApp extends JFrame {
 
     private LoginPanel loginPanel;
 
-    private JPanel menuPanel;
-    private JPanel curriculumPanel;
-    private JPanel schedulingPanel;
-    private JPanel bookingsPanel;
-    private JPanel adminPanel;
-    private JPanel reportsPanel;
+    private JPanel menuPanel = new JPanel();
+    private JPanel curriculumPanel = new JPanel();
+    private JPanel schedulingPanel = new JPanel();
+    private JPanel bookingsPanel = new JPanel();
+    private JPanel adminPanel = new JPanel();
+    private JPanel reportsPanel = new JPanel();
 
     public MyAdviceApp() {
         super("myAdvice - Student Advising System (Pilot)");
@@ -57,8 +57,6 @@ public class MyAdviceApp extends JFrame {
         // Center on screen
         setLocationRelativeTo(null);
 
-        AuthService authService = backend.getAuthService();
-
         // Add screens to CardLayout
 
         // 1) Opening Role Select Screen
@@ -66,28 +64,17 @@ public class MyAdviceApp extends JFrame {
 
         // 2) Login Screen
         // This panel will read app.getSelectedRole() to know which role was chosen.
-        loginPanel = new LoginPanel(this, authService);
+        loginPanel = new LoginPanel(this, backend);
         root.add(loginPanel, LOGIN);
 
         // 3) Menu Screen
-        menuPanel = buildMenuScreen();
         root.add(menuPanel, MENU);
 
         // 4) Module Screens
-        // Curriculum screen
-        curriculumPanel = buildCurriculumPanel();
         root.add(curriculumPanel, CURRICULUM);
-        // Scheduling Screen
-        schedulingPanel = buildSchedulingPanel();
         root.add(schedulingPanel, SCHEDULING);
-        // Bookings Screen
-        bookingsPanel = buildBookingsPanel();
         root.add(bookingsPanel, BOOKINGS);
-        // Administrating the System Screen
-        MockPrereqAdminService prereqAdminService = new MockPrereqAdminService();
-        root.add(new AdminPanel(this, authService, prereqAdminService), ADMIN);
-        // Reports Screen
-        reportsPanel = buildReportsPanel();
+        root.add(adminPanel, ADMIN);
         root.add(reportsPanel, REPORTS);
 
         // Put root card panel inside the JFrame
@@ -96,8 +83,6 @@ public class MyAdviceApp extends JFrame {
         // Show the opening screen first
         showScreen(ROLE_SELECT);
     }
-
-    private String currentScreen = null; // add this field at class level
 
     // Navigate between screens
     public void showScreen(String name) {
@@ -109,7 +94,9 @@ public class MyAdviceApp extends JFrame {
 
         // If we are going to the menu, rebuild it so it reflects the selected role
         if (MENU.equals(name)) {
-            root.remove(menuPanel);
+            if (menuPanel != null) {
+                root.remove(menuPanel);
+            }
             menuPanel = buildMenuScreen();
             root.add(menuPanel, MENU);
             root.revalidate();
@@ -118,7 +105,9 @@ public class MyAdviceApp extends JFrame {
 
         // If we are going to Curriculum page, rebuild it so it reflects the selected role
         if (CURRICULUM.equals(name)) {
-            root.remove(curriculumPanel);
+            if (curriculumPanel != null) {
+                root.remove(curriculumPanel);
+            }
             curriculumPanel = buildCurriculumPanel();
             root.add(curriculumPanel, CURRICULUM);
             root.revalidate();
@@ -126,7 +115,9 @@ public class MyAdviceApp extends JFrame {
         }
         // If we are going to Scheduling page, rebuild it so it reflects the selected role
         if (SCHEDULING.equals(name)) {
-            root.remove(schedulingPanel);
+            if (schedulingPanel != null) {
+                root.remove(schedulingPanel);
+            }
             schedulingPanel = buildSchedulingPanel();
             root.add(schedulingPanel, SCHEDULING);
             root.revalidate();
@@ -134,14 +125,18 @@ public class MyAdviceApp extends JFrame {
         }
         // If we are going to Bookings page, rebuild it so it reflects the selected role
         if (BOOKINGS.equals(name)) {
-            root.remove(bookingsPanel);
+            if (bookingsPanel != null) {
+                root.remove(bookingsPanel);
+            }
             bookingsPanel = buildBookingsPanel();
             root.add(bookingsPanel, BOOKINGS);
             root.revalidate();
             root.repaint();
         }
         if (ADMIN.equals(name)) {
-            root.remove(adminPanel);
+            if (adminPanel != null) {
+                root.remove(adminPanel);
+            }
             adminPanel = buildAdminPanel();
             root.add(adminPanel, ADMIN);
             root.revalidate();
@@ -149,7 +144,9 @@ public class MyAdviceApp extends JFrame {
         }
         // If we are going to Reports page, rebuild it so it reflects the selected role
         if (REPORTS.equals(name)) {
-            root.remove(reportsPanel);
+            if (reportsPanel != null) {
+                root.remove(reportsPanel);
+            }
             reportsPanel = buildReportsPanel();
             root.add(reportsPanel, REPORTS);
             root.revalidate();
@@ -256,20 +253,20 @@ public class MyAdviceApp extends JFrame {
 
     private JPanel buildSchedulingPanel() {
         if ("FACULTY_STAFF".equals(getSelectedRole())) {
-            return new FacultySchedulingPanel(this, backend.getSchedulingStore());
+            return new FacultySchedulingPanel(this, backend);
         }
-        return new StudentSchedulingPanel(this, backend.getSchedulingStore());
+        return new StudentSchedulingPanel(this, backend);
     }
 
     private JPanel buildBookingsPanel() {
         if ("FACULTY_STAFF".equals(getSelectedRole())) {
-            return new FacultyBookingsPanel(this);
+            return new FacultyBookingsPanel(this, backend);
         }
-        return new StudentBookingsPanel(this, backend.getStudentBookingsService());
+        return new StudentBookingsPanel(this, backend);
     }
 
     private JPanel buildAdminPanel() {
-        return new AdminPanel(this, backend.getAuthService());
+        return new AdminPanel(this, backend);
     }
 
     private JPanel buildReportsPanel() {

@@ -1,34 +1,26 @@
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-
- // Uses AuthService (mock) to validate login for now.
+import java.util.Map;
 
 public class LoginPanel extends JPanel {
 
-    private static final Color BLUE   = new Color(0x005A9C);
-    private static final Color GRAY   = new Color(0x555555);
+    private static final Color BLUE = new Color(0x005A9C);
+    private static final Color GRAY = new Color(0x555555);
     private static final Color YELLOW = new Color(0xFFC72C);
-    private static final Color WHITE  = Color.WHITE;
+    private static final Color WHITE = Color.WHITE;
 
-    // Reference to main page so we can navigate screens using CardLayout
     private final MyAdviceApp app;
+    private final AppBackend backend;
 
-    // Mock authentication service (implement backend and database later)
-    private final AuthService auth;
-
-    // Input login fields
     private final JTextField nameField = new JTextField(22);
-    private final JTextField idField   = new JTextField(22);
+    private final JTextField emailField = new JTextField(22);
+    private final JPasswordField passwordField = new JPasswordField(22);
 
-    public LoginPanel(MyAdviceApp app, AuthService auth) {
+    public LoginPanel(MyAdviceApp app, AppBackend backend) {
         this.app = app;
-        this.auth = auth;
+        this.backend = backend;
 
-        // BorderLayout:
-        // NORTH  = header bar
-        // CENTER = login content
-        // SOUTH  = bottom bar (Back button)
         setLayout(new BorderLayout());
         setBackground(WHITE);
 
@@ -37,7 +29,6 @@ public class LoginPanel extends JPanel {
         add(buildBottomBar(), BorderLayout.SOUTH);
     }
 
-     // Top blue header bar with "myAdvice".
     private JComponent buildHeader() {
         JPanel header = new JPanel(new BorderLayout());
         header.setBackground(BLUE);
@@ -53,27 +44,30 @@ public class LoginPanel extends JPanel {
     }
 
     private JComponent buildCenterForm() {
-
-        // Outer panel centers the whole content block
         JPanel outer = new JPanel(new GridBagLayout());
         outer.setBackground(WHITE);
 
-        // Content stack (vertical)
         JPanel content = new JPanel();
         content.setBackground(WHITE);
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBorder(new EmptyBorder(30, 40, 20, 40));
 
-        // Centered "Log in" heading
-        JLabel heading = new JLabel("Log in", SwingConstants.CENTER);
+        JLabel heading = new JLabel("Log in / Sign up", SwingConstants.CENTER);
         heading.setForeground(GRAY);
         heading.setFont(heading.getFont().deriveFont(Font.BOLD, 30f));
         heading.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         content.add(heading);
         content.add(Box.createVerticalStrut(25));
+        content.add(buildForm());
+        content.add(Box.createVerticalStrut(18));
+        content.add(buildActionButtons());
 
-        // Input form
+        outer.add(content);
+        return outer;
+    }
+
+    private JComponent buildForm() {
         JPanel form = new JPanel(new GridBagLayout());
         form.setBackground(WHITE);
 
@@ -82,148 +76,84 @@ public class LoginPanel extends JPanel {
 
         Dimension fieldSize = new Dimension(420, 34);
         nameField.setPreferredSize(fieldSize);
-        idField.setPreferredSize(fieldSize);
+        emailField.setPreferredSize(fieldSize);
+        passwordField.setPreferredSize(fieldSize);
         nameField.setFont(nameField.getFont().deriveFont(15f));
-        idField.setFont(idField.getFont().deriveFont(15f));
+        emailField.setFont(emailField.getFont().deriveFont(15f));
+        passwordField.setFont(passwordField.getFont().deriveFont(15f));
 
-        // Row spacing
-        Insets rowInsets = new Insets(8, 0, 8, 0);
+        addRow(form, gbc, 0, "Full Name:", nameField);
+        addRow(form, gbc, 1, "Email:", emailField);
+        addRow(form, gbc, 2, "Password:", passwordField);
 
-        // Row 1: Name
-        JLabel nameLbl = new JLabel("Name:");
-        nameLbl.setForeground(GRAY);
-        nameLbl.setFont(nameLbl.getFont().deriveFont(Font.BOLD, 14f));
+        JLabel hint = new JLabel("Login uses email + password. Name is only needed for new sign-ups.");
+        hint.setForeground(GRAY);
+        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 12f));
 
-        gbc.gridy = 0;
-
-        // label cell
-        gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.insets = new Insets(rowInsets.top, 0, rowInsets.bottom, 10); // small label->field gap
-        form.add(nameLbl, gbc);
-
-        // field cell
         gbc.gridx = 1;
-        gbc.weightx = 1;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = rowInsets;
-        form.add(nameField, gbc);
+        gbc.gridy = 3;
+        gbc.insets = new Insets(8, 0, 0, 0);
+        form.add(hint, gbc);
 
-        // Row 2: ID
-        JLabel idLbl = new JLabel("ID:");
-        idLbl.setForeground(GRAY);
-        idLbl.setFont(idLbl.getFont().deriveFont(Font.BOLD, 14f));
-
-        gbc.gridy = 1;
-
-        // label cell
-        gbc.gridx = 0;
-        gbc.weightx = 0;
-        gbc.fill = GridBagConstraints.NONE;
-        gbc.insets = new Insets(rowInsets.top, 0, rowInsets.bottom, 10);
-        form.add(idLbl, gbc);
-
-        // field cell
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = rowInsets;
-        form.add(idField, gbc);
-
-        content.add(form);
-        content.add(Box.createVerticalStrut(18));
-
-        // Centered Login button
-        JPanel loginButtonRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-        loginButtonRow.setBackground(WHITE);
-
-        JButton loginBtn = new JButton("Log In");
-        makeAuthButton(loginBtn, BLUE);
-
-        // size for authencation buttons
-        Dimension authBtnSize = new Dimension(140, 44);
-        loginBtn.setPreferredSize(authBtnSize);
-
-        loginBtn.addActionListener(e -> handleLogin());
-
-        loginButtonRow.add(loginBtn);
-        content.add(loginButtonRow);
-
-        // Spacing before Sign Up section
-        content.add(Box.createVerticalStrut(28));
-
-        JPanel signupTextRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-        signupTextRow.setBackground(WHITE);
-
-        JLabel signupHint = new JLabel("Not in the system?");
-        signupHint.setForeground(GRAY);
-        signupHint.setFont(signupHint.getFont().deriveFont(Font.PLAIN, 14f));
-
-        signupTextRow.add(signupHint);
-        content.add(signupTextRow);
-
-        content.add(Box.createVerticalStrut(10));
-
-        JPanel signupButtonRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-        signupButtonRow.setBackground(WHITE);
-
-        JButton signupBtn = new JButton("Sign Up");
-        makeAuthButton(signupBtn, GRAY);
-
-        // Same size as Login button
-        signupBtn.setPreferredSize(authBtnSize);
-
-        signupBtn.addActionListener(e -> {
-            String name = nameField.getText().trim();
-            String id   = idField.getText().trim();
-
-            // Basic validation
-            if (name.isEmpty() || id.isEmpty()) {
-                JOptionPane.showMessageDialog(
-                        this,
-                        "Please enter both Name and ID before signing up.",
-                        "Missing Information",
-                        JOptionPane.WARNING_MESSAGE
-                );
-                return;
-            }
-
-            // Role comes from RoleSelect screen
-            String roleStr = app.getSelectedRole();
-            if (roleStr == null) {
-                JOptionPane.showMessageDialog(
-                        this,
-                        "Please select Student or Faculty/Staff first.",
-                        "Role Missing",
-                        JOptionPane.WARNING_MESSAGE
-                );
-                app.showScreen("role_select");
-                return;
-            }
-
-            UserRole role = roleStr.equals("STUDENT") ? UserRole.STUDENT : UserRole.FACULTY_STAFF;
-
-            // ✅ This is the important line: create a PENDING request in AuthService
-            String result = auth.requestSignup(name, id, role);
-
-            JOptionPane.showMessageDialog(
-                    this,
-                    result,
-                    "Sign Up",
-                    JOptionPane.INFORMATION_MESSAGE
-            );
-        });
-
-        signupButtonRow.add(signupBtn);
-        content.add(signupButtonRow);
-
-        // Add the content block to the centered outer panel
-        outer.add(content);
-        return outer;
+        return form;
     }
 
-     // Bottom bar with Back button on bottom right.
+    private void addRow(JPanel form, GridBagConstraints gbc, int row, String label, JComponent field) {
+        JLabel rowLabel = new JLabel(label);
+        rowLabel.setForeground(GRAY);
+        rowLabel.setFont(rowLabel.getFont().deriveFont(Font.BOLD, 14f));
+
+        gbc.gridy = row;
+        gbc.gridx = 0;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.insets = new Insets(8, 0, 8, 10);
+        form.add(rowLabel, gbc);
+
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(8, 0, 8, 0);
+        form.add(field, gbc);
+    }
+
+    private JComponent buildActionButtons() {
+        JPanel actions = new JPanel();
+        actions.setBackground(WHITE);
+        actions.setLayout(new BoxLayout(actions, BoxLayout.Y_AXIS));
+
+        Dimension authBtnSize = new Dimension(160, 44);
+
+        JPanel loginRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        loginRow.setBackground(WHITE);
+        JButton loginBtn = new JButton("Log In");
+        makeAuthButton(loginBtn, BLUE);
+        loginBtn.setPreferredSize(authBtnSize);
+        loginBtn.addActionListener(e -> handleLogin());
+        loginRow.add(loginBtn);
+
+        JPanel hintRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        hintRow.setBackground(WHITE);
+        JLabel signupHint = new JLabel("Not in the system yet?");
+        signupHint.setForeground(GRAY);
+        signupHint.setFont(signupHint.getFont().deriveFont(Font.PLAIN, 14f));
+        hintRow.add(signupHint);
+
+        JPanel signupRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+        signupRow.setBackground(WHITE);
+        JButton signupBtn = new JButton("Sign Up");
+        makeAuthButton(signupBtn, GRAY);
+        signupBtn.setPreferredSize(authBtnSize);
+        signupBtn.addActionListener(e -> handleSignup());
+        signupRow.add(signupBtn);
+
+        actions.add(loginRow);
+        actions.add(Box.createVerticalStrut(28));
+        actions.add(hintRow);
+        actions.add(Box.createVerticalStrut(10));
+        actions.add(signupRow);
+        return actions;
+    }
 
     private JComponent buildBottomBar() {
         JPanel bottom = new JPanel(new BorderLayout());
@@ -232,33 +162,25 @@ public class LoginPanel extends JPanel {
 
         JButton back = new JButton("Back");
         makeSmallButton(back);
-
-        // Back goes to role select page
         back.addActionListener(e -> app.showScreen("role_select"));
         bottom.add(back, BorderLayout.EAST);
         return bottom;
     }
 
-    /*
-     * Attempts login using AuthService (mock).
-     * If successful -> go to main menu.
-     * If failed -> popup telling user to sign up.
-     */
     private void handleLogin() {
-        String name = nameField.getText().trim();
-        String id   = idField.getText().trim();
+        String email = emailField.getText().trim();
+        String password = new String(passwordField.getPassword()).trim();
 
-        if (name.isEmpty() || id.isEmpty()) {
+        if (email.isEmpty() || password.isEmpty()) {
             JOptionPane.showMessageDialog(
                     this,
-                    "Please enter both Name and ID.",
+                    "Please enter both email and password.",
                     "Missing Information",
                     JOptionPane.WARNING_MESSAGE
             );
             return;
         }
 
-        // Role comes from your role select page
         String roleStr = app.getSelectedRole();
         if (roleStr == null) {
             JOptionPane.showMessageDialog(
@@ -271,33 +193,36 @@ public class LoginPanel extends JPanel {
             return;
         }
 
-        UserRole role = roleStr.equals("STUDENT") ? UserRole.STUDENT : UserRole.FACULTY_STAFF;
-
-        String result = auth.login(name, id, role);
-
-        if (!"OK".equals(result)) {
+        try {
+            UserRecord user = backend.login(email, password, roleStr);
+            app.setCurrentUser(user);
+            app.showScreen("menu");
+        } catch (ApiClient.ApiException ex) {
             JOptionPane.showMessageDialog(
                     this,
-                    "Login failed: " + result + "\n\nPlease Sign Up if you are not in the system.",
+                    "Login failed: " + parseApiError(ex),
                     "Login Failed",
                     JOptionPane.ERROR_MESSAGE
             );
-            return;
+        } catch (RuntimeException ex) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Login failed: " + ex.getMessage(),
+                    "Login Failed",
+                    JOptionPane.ERROR_MESSAGE
+            );
         }
-
-        // Success -> main menu
-        app.setCurrentUser(auth.getUser(id));
-        app.showScreen("menu");
     }
 
     private void handleSignup() {
         String name = nameField.getText().trim();
-        String id = idField.getText().trim();
+        String email = emailField.getText().trim();
+        String password = new String(passwordField.getPassword()).trim();
 
-        if (name.isEmpty() || id.isEmpty()) {
+        if (name.isEmpty() || email.isEmpty() || password.isEmpty()) {
             JOptionPane.showMessageDialog(
                     this,
-                    "Enter both Name and ID before requesting sign up.",
+                    "Please enter name, email, and password before signing up.",
                     "Missing Information",
                     JOptionPane.WARNING_MESSAGE
             );
@@ -308,7 +233,7 @@ public class LoginPanel extends JPanel {
         if (roleStr == null) {
             JOptionPane.showMessageDialog(
                     this,
-                    "Choose Student or Faculty/Staff first.",
+                    "Please select Student or Faculty/Staff first.",
                     "Role Missing",
                     JOptionPane.WARNING_MESSAGE
             );
@@ -316,20 +241,42 @@ public class LoginPanel extends JPanel {
             return;
         }
 
-        UserRole role = roleStr.equals("STUDENT") ? UserRole.STUDENT : UserRole.FACULTY_STAFF;
-        String result = auth.requestSignup(name, id, role);
-
-        JOptionPane.showMessageDialog(
-                this,
-                result,
-                "Sign Up",
-                "That ID already exists. Try logging in instead.".equals(result)
-                        ? JOptionPane.WARNING_MESSAGE
-                        : JOptionPane.INFORMATION_MESSAGE
-        );
+        try {
+            backend.register(name, email, password, roleStr);
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Sign-up request created. An admin will need to approve the account before login.",
+                    "Sign Up Submitted",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+        } catch (ApiClient.ApiException ex) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Sign-up failed: " + parseApiError(ex),
+                    "Sign Up Failed",
+                    JOptionPane.ERROR_MESSAGE
+            );
+        } catch (RuntimeException ex) {
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Sign-up failed: " + ex.getMessage(),
+                    "Sign Up Failed",
+                    JOptionPane.ERROR_MESSAGE
+            );
+        }
     }
 
-    // small button for back button
+    private String parseApiError(ApiClient.ApiException ex) {
+        try {
+            Object parsed = SimpleJson.parse(ex.responseBody);
+            if (parsed instanceof Map<?, ?> map && map.get("error") != null) {
+                return String.valueOf(map.get("error"));
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return ex.responseBody == null || ex.responseBody.isBlank() ? ex.getMessage() : ex.responseBody;
+    }
+
     private void makeSmallButton(JButton btn) {
         btn.setBackground(YELLOW);
         btn.setForeground(Color.BLACK);
@@ -338,7 +285,6 @@ public class LoginPanel extends JPanel {
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
     }
 
-    // for Auth buttons
     private void makeAuthButton(JButton btn, Color bg) {
         btn.setBackground(bg);
         btn.setForeground(YELLOW);
@@ -349,11 +295,9 @@ public class LoginPanel extends JPanel {
     }
 
     public void resetFields() {
-        // Clear inputs
         nameField.setText("");
-        idField.setText("");
-
-        // Put cursor back in Name field for convenience
-        nameField.requestFocusInWindow();
+        emailField.setText("");
+        passwordField.setText("");
+        emailField.requestFocusInWindow();
     }
 }

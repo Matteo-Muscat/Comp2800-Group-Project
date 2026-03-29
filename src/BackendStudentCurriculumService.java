@@ -58,6 +58,20 @@ public class BackendStudentCurriculumService implements StudentCurriculumPanel.S
         inquiryStore.addInquiry(studentId, studentName, message);
     }
 
+    @Override
+    public List<StudentCurriculumPanel.FacultyResponse> getResponses(String studentId) {
+        List<StudentCurriculumPanel.FacultyResponse> responses = new ArrayList<>();
+        for (MockInquiryStore.Response response : inquiryStore.getResponsesForStudent(studentId)) {
+            responses.add(new StudentCurriculumPanel.FacultyResponse(
+                    response.inquiryId,
+                    response.facultyName,
+                    response.body,
+                    response.createdAt
+            ));
+        }
+        return responses;
+    }
+
     private String extractCode(String courseDisplay) {
         if (courseDisplay == null) {
             return "";

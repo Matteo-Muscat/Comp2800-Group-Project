@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalTime;
 import java.util.List;
 
 @RestController
@@ -43,6 +44,58 @@ public class SchedulingController {
                 .toList();
     }
 
+    @PostMapping("/sections")
+    public ResponseEntity<ApiDtoFactory.SectionDto> addSection(@RequestBody SectionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                ApiDtoFactory.toSectionDto(schedulingService.addSection(
+                        request.courseCode(),
+                        request.termId(),
+                        request.sectionNumber(),
+                        request.instructorUserId(),
+                        request.building(),
+                        request.room()
+                ))
+        );
+    }
+
+    @PutMapping("/sections/{sectionId}")
+    public ResponseEntity<ApiDtoFactory.SectionDto> updateSection(@PathVariable Integer sectionId,
+                                                                  @RequestBody SectionRequest request) {
+        return ResponseEntity.ok(ApiDtoFactory.toSectionDto(
+                schedulingService.updateSection(
+                        sectionId,
+                        request.courseCode(),
+                        request.termId(),
+                        request.sectionNumber(),
+                        request.instructorUserId(),
+                        request.building(),
+                        request.room()
+                )
+        ));
+    }
+
+    @DeleteMapping("/sections/{sectionId}")
+    public ResponseEntity<Void> deleteSection(@PathVariable Integer sectionId) {
+        schedulingService.deleteSection(sectionId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/sections/{sectionId}/meetings")
+    public ResponseEntity<List<ApiDtoFactory.SectionMeetingDto>> replaceMeetings(@PathVariable Integer sectionId,
+                                                                                 @RequestBody List<MeetingRequest> request) {
+        List<SchedulingService.MeetingUpdate> updates = request.stream()
+                .map(meeting -> new SchedulingService.MeetingUpdate(
+                        meeting.dayOfWeek(),
+                        meeting.startTime(),
+                        meeting.endTime()
+                ))
+                .toList();
+
+        return ResponseEntity.ok(schedulingService.replaceMeetings(sectionId, updates).stream()
+                .map(ApiDtoFactory::toSectionMeetingDto)
+                .toList());
+    }
+
     @PostMapping("/schedule")
     public ResponseEntity<ApiDtoFactory.StudentScheduleDto> addToSchedule(@RequestBody AddScheduleRequest request) {
         StudentSchedule schedule = schedulingService.addToSchedule(
@@ -77,4 +130,9 @@ public class SchedulingController {
     }
 
     public record AddScheduleRequest(Integer studentId, Integer termId, Integer sectionId) {}
+    public record SectionRequest(String courseCode, Integer termId, String sectionNumber,
+                                 Integer instructorUserId, String building, String room) {}
+    public record MeetingRequest(com.myadvice.myadvice.entity.SectionMeeting.DayOfWeek dayOfWeek,
+                                 LocalTime startTime,
+                                 LocalTime endTime) {}
 }

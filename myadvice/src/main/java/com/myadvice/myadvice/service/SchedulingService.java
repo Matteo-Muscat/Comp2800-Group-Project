@@ -3,6 +3,8 @@ package com.myadvice.myadvice.service;
 import com.myadvice.myadvice.entity.*;
 import com.myadvice.myadvice.repository.*;
 import org.springframework.stereotype.Service;
+import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -67,4 +69,51 @@ public class SchedulingService {
     public List<StudentSchedule> getEnrolledStudents(Integer sectionId) {
         return scheduleRepository.findBySectionId(sectionId);
     }
+
+    public Section addSection(String courseCode, Integer termId, String sectionNumber,
+                              Integer instructorUserId, String building, String room) {
+        Section section = new Section();
+        section.setCourseCode(courseCode);
+        section.setTermId(termId);
+        section.setSectionNumber(sectionNumber);
+        section.setInstructorUserId(instructorUserId);
+        section.setBuilding(building);
+        section.setRoom(room);
+        return sectionRepository.save(section);
+    }
+
+    public Section updateSection(Integer sectionId, String courseCode, Integer termId, String sectionNumber,
+                                 Integer instructorUserId, String building, String room) {
+        Section section = sectionRepository.findById(sectionId).orElseThrow();
+        section.setCourseCode(courseCode);
+        section.setTermId(termId);
+        section.setSectionNumber(sectionNumber);
+        section.setInstructorUserId(instructorUserId);
+        section.setBuilding(building);
+        section.setRoom(room);
+        return sectionRepository.save(section);
+    }
+
+    public void deleteSection(Integer sectionId) {
+        scheduleRepository.deleteAll(scheduleRepository.findBySectionId(sectionId));
+        meetingRepository.deleteAll(meetingRepository.findBySectionId(sectionId));
+        sectionRepository.deleteById(sectionId);
+    }
+
+    public List<SectionMeeting> replaceMeetings(Integer sectionId, List<MeetingUpdate> updates) {
+        meetingRepository.deleteAll(meetingRepository.findBySectionId(sectionId));
+
+        List<SectionMeeting> saved = new ArrayList<>();
+        for (MeetingUpdate update : updates) {
+            SectionMeeting meeting = new SectionMeeting();
+            meeting.setSectionId(sectionId);
+            meeting.setDayOfWeek(update.dayOfWeek());
+            meeting.setStartTime(update.startTime());
+            meeting.setEndTime(update.endTime());
+            saved.add(meetingRepository.save(meeting));
+        }
+        return saved;
+    }
+
+    public record MeetingUpdate(SectionMeeting.DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {}
 }

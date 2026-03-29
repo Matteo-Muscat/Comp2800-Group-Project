@@ -13,6 +13,7 @@ public class UserRecord {
 
     // Person's name
     public final String name;
+    public final String email;
 
     // Role (Student or Faculty/Staff)
     public final UserRole role;
@@ -25,8 +26,13 @@ public class UserRecord {
      * Constructor: creates a new UserRecord object.
      */
     public UserRecord(String id, String name, UserRole role, boolean approved) {
+        this(id, name, null, role, approved);
+    }
+
+    public UserRecord(String id, String name, String email, UserRole role, boolean approved) {
         this.id = id;
         this.name = name;
+        this.email = email;
         this.role = role;
         this.approved = approved;
     }
